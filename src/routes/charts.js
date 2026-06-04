@@ -12,7 +12,7 @@ const CORES = [
 
 function quickchartUrl(config) {
   const encoded = encodeURIComponent(JSON.stringify(config));
-  return `https://quickchart.io/chart?c=${encoded}&width=800&height=400&backgroundColor=white&devicePixelRatio=2.0`;
+  return `https://quickchart.io/chart.png?c=${encoded}&width=800&height=400&backgroundColor=white&devicePixelRatio=2.0`;
 }
 
 // GET /api/charts/bar?date=YYYY-MM-DD
