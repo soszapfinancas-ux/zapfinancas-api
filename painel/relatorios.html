@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ZapFinanças — Relatórios</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script>tailwind.config={theme:{extend:{colors:{brand:{50:'#ecfdf5',100:'#d1fae5',500:'#10b981',600:'#059669',700:'#047857',900:'#064e3b'}}}}}</script>
+</head>
+<body class="bg-gray-50 font-sans">
+<div class="flex h-screen overflow-hidden">
+
+<!-- Sidebar -->
+<aside class="w-64 bg-brand-900 text-white flex flex-col shrink-0">
+  <div class="p-6 border-b border-brand-700">
+    <div class="flex items-center gap-3">
+      <span class="text-2xl">💰</span>
+      <div><div class="font-bold text-lg">ZapFinanças</div>
+        <div id="userName" class="text-brand-300 text-xs"></div></div>
+    </div>
+  </div>
+  <nav class="flex-1 p-4 space-y-1 text-sm">
+    <a href="dashboard.html" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-brand-700">📊 Dashboard</a>
+    <a href="relatorios.html" class="flex items-center gap-3 px-3 py-2 rounded-lg bg-brand-700 font-medium">📋 Relatórios</a>
+    <a href="configuracoes.html" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-brand-700">⚙️ Configurações</a>
+  </nav>
+  <div class="p-4 border-t border-brand-700">
+    <div id="planBadge" class="text-xs text-brand-300 mb-3"></div>
+    <button onclick="logout()" class="w-full text-left text-sm text-brand-300 hover:text-white px-3 py-2">🚪 Sair</button>
+  </div>
+</aside>
+
+<!-- Main -->
+<main class="flex-1 overflow-y-auto">
+  <header class="bg-white border-b px-6 py-4">
+    <h1 class="text-xl font-bold text-gray-800">Relatórios</h1>
+  </header>
+
+  <div class="p-6 space-y-6">
+
+    <!-- Filtros -->
+    <div class="bg-white rounded-xl shadow-sm border p-5 space-y-4">
+      <h2 class="font-semibold text-gray-700">Filtros</h2>
+      <div class="flex flex-wrap gap-4 items-end">
+
+        <!-- Tipo -->
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Tipo de relatório</label>
+          <div class="flex gap-1">
+            <button id="btnSint" onclick="setTipo('sintetico')"
+              class="px-3 py-2 text-sm rounded-lg bg-brand-600 text-white font-medium">Sintético</button>
+            <button id="btnAnal" onclick="setTipo('analitico')"
+              class="px-3 py-2 text-sm rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200">Analítico</button>
+          </div>
+        </div>
+
+        <!-- Período -->
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Período</label>
+          <select id="periodo" onchange="toggleCustom()"
+            class="border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 outline-none">
+            <option value="7dias">Últimos 7 dias</option>
+            <option value="30dias" selected>Últimos 30 dias</option>
+            <option value="mes">Este mês</option>
+            <option value="ano">Este ano</option>
+            <option value="custom">Personalizado</option>
+          </select>
+        </div>
+
+        <!-- Datas customizadas -->
+        <div id="customDates" class="hidden flex gap-2 items-end">
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">De</label>
+            <input type="date" id="startDate" class="border rounded-lg px-2 py-2 text-sm">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Até</label>
+            <input type="date" id="endDate" class="border rounded-lg px-2 py-2 text-sm">
+          </div>
+        </div>
+
+        <button onclick="loadReport()"
+          class="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+          🔍 Gerar
+        </button>
+      </div>
+
+      <!-- Exportações (Plano Familiar) -->
+      <div id="exportBtns" class="hidden flex gap-2 pt-2 border-t flex-wrap">
+        <span class="text-xs text-gray-500 self-center">Exportar:</span>
+        <button onclick="exportar('pdf','sintetico')"
+          class="flex items-center gap-1 border px-3 py-1.5 rounded-lg text-sm text-red-600 hover:bg-red-50">
+          📄 PDF Sintético
+        </button>
+        <button onclick="exportar('pdf','analitico')"
+          class="flex items-center gap-1 border px-3 py-1.5 rounded-lg text-sm text-red-600 hover:bg-red-50">
+          📄 PDF Analítico
+        </button>
+        <button onclick="exportar('excel')"
+          class="flex items-center gap-1 border px-3 py-1.5 rounded-lg text-sm text-green-600 hover:bg-green-50">
+          📊 Excel
+        </button>
+      </div>
+      <div id="upgradeMsg" class="hidden text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2">
+        🔒 Exportação disponível no <strong>Plano Familiar</strong>. Acesse zapfinancas.orbitarosa.com para upgrade.
+      </div>
+    </div>
+
+    <!-- Resultado -->
+    <div id="resultArea" class="space-y-6 hidden">
+
+      <!-- Cards de totais -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="bg-white rounded-xl shadow-sm border p-5">
+          <p class="text-xs font-medium text-gray-500 uppercase">Receitas</p>
+          <p id="rReceitas" class="text-2xl font-bold mt-1 text-brand-600">—</p>
+        </div>
+        <div class="bg-white rounded-xl shadow-sm border p-5">
+          <p class="text-xs font-medium text-gray-500 uppercase">Despesas</p>
+          <p id="rDespesas" class="text-2xl font-bold mt-1 text-red-500">—</p>
+        </div>
+        <div class="bg-white rounded-xl shadow-sm border p-5">
+          <p class="text-xs font-medium text-gray-500 uppercase">Saldo</p>
+          <p id="rSaldo" class="text-2xl font-bold mt-1">—</p>
+        </div>
+      </div>
+
+      <!-- SINTÉTICO -->
+      <div id="viewSintetico" class="space-y-6">
+        <!-- Gráfico pizza + tabela categorias -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div class="bg-white rounded-xl shadow-sm border p-5">
+            <h3 class="font-semibold text-gray-700 mb-3">Despesas por Categoria</h3>
+            <div class="relative h-64"><canvas id="chartSintPizza"></canvas></div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm border p-5">
+            <h3 class="font-semibold text-gray-700 mb-3">Evolução Mensal</h3>
+            <div class="relative h-64"><canvas id="chartSintBarra"></canvas></div>
+          </div>
+        </div>
+        <!-- Tabela por categoria -->
+        <div class="bg-white rounded-xl shadow-sm border">
+          <div class="px-5 py-4 border-b font-semibold text-gray-700">Breakdown por Categoria</div>
+          <div id="catTable" class="divide-y"></div>
+        </div>
+      </div>
+
+      <!-- ANALÍTICO -->
+      <div id="viewAnalitico" class="hidden">
+        <div class="bg-white rounded-xl shadow-sm border">
+          <div class="flex items-center justify-between px-5 py-4 border-b">
+            <h3 class="font-semibold text-gray-700">Todas as Transações</h3>
+            <span id="txCount" class="text-xs bg-gray-100 text-gray-600 rounded-full px-2 py-0.5"></span>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Data</th>
+                  <th class="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Descrição</th>
+                  <th class="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Categoria</th>
+                  <th class="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Pagamento</th>
+                  <th class="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase">Valor</th>
+                </tr>
+              </thead>
+              <tbody id="txTable" class="divide-y"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Loading -->
+    <div id="loadingArea" class="hidden text-center py-10">
+      <div class="inline-block w-8 h-8 border-4 border-brand-500 border-t-transparent rounded-full animate-spin"></div>
+      <p class="text-gray-500 text-sm mt-2">Gerando relatório...</p>
+    </div>
+
+  </div>
+</main>
+</div>
+
+<script>
+const API  = '';
+const token = localStorage.getItem('zf_token');
+const user  = JSON.parse(localStorage.getItem('zf_user') || '{}');
+if (!token) location.href = 'index.html';
+
+document.getElementById('userName').textContent  = user.nome?.split(' ')[0] || '';
+document.getElementById('planBadge').textContent = `Plano: ${user.plano || '—'}`;
+
+let tipo = 'sintetico';
+let chartPizza, chartBarra;
+const fmt = v => 'R$ ' + Number(v).toLocaleString('pt-BR', {minimumFractionDigits:2});
+
+function setTipo(t) {
+  tipo = t;
+  document.getElementById('btnSint').className = `px-3 py-2 text-sm rounded-lg font-medium ${t==='sintetico'?'bg-brand-600 text-white':'bg-gray-100 text-gray-600 hover:bg-gray-200'}`;
+  document.getElementById('btnAnal').className = `px-3 py-2 text-sm rounded-lg font-medium ${t==='analitico'?'bg-brand-600 text-white':'bg-gray-100 text-gray-600 hover:bg-gray-200'}`;
+}
+
+function toggleCustom() {
+  document.getElementById('customDates').classList.toggle('hidden', document.getElementById('periodo').value !== 'custom');
+}
+
+async function loadReport() {
+  const periodo = document.getElementById('periodo').value;
+  let url = `/api/reports/${tipo}?periodo=${periodo}`;
+  if (periodo === 'custom') {
+    const s = document.getElementById('startDate').value;
+    const e = document.getElementById('endDate').value;
+    if (!s || !e) return alert('Informe as datas');
+    url += `&start=${s}&end=${e}`;
+  }
+
+  document.getElementById('loadingArea').classList.remove('hidden');
+  document.getElementById('resultArea').classList.add('hidden');
+
+  const r = await fetch(API + url, { headers: { apikey: token } });
+  if (r.status === 401) { logout(); return; }
+  const d = await r.json();
+
+  document.getElementById('loadingArea').classList.add('hidden');
+  document.getElementById('resultArea').classList.remove('hidden');
+
+  const sp = Number(d.totais.saldo);
+  document.getElementById('rReceitas').textContent = fmt(d.totais.receitas);
+  document.getElementById('rDespesas').textContent = fmt(d.totais.despesas);
+  document.getElementById('rSaldo').textContent    = fmt(sp);
+  document.getElementById('rSaldo').className      = `text-2xl font-bold mt-1 ${sp>=0?'text-brand-600':'text-red-500'}`;
+
+  // Mostrar exportações
+  if (user.tem_exportacao) {
+    document.getElementById('exportBtns').classList.remove('hidden');
+    document.getElementById('upgradeMsg').classList.add('hidden');
+  } else {
+    document.getElementById('exportBtns').classList.add('hidden');
+    document.getElementById('upgradeMsg').classList.remove('hidden');
+  }
+
+  if (tipo === 'sintetico') {
+    document.getElementById('viewSintetico').classList.remove('hidden');
+    document.getElementById('viewAnalitico').classList.add('hidden');
+    renderSintetico(d);
+  } else {
+    document.getElementById('viewSintetico').classList.add('hidden');
+    document.getElementById('viewAnalitico').classList.remove('hidden');
+    renderAnalitico(d);
+  }
+}
+
+function renderSintetico(d) {
+  const cats    = d.por_categoria || [];
+  const desp    = cats.filter(c => Number(c.despesas) > 0);
+  const colors  = ['#FF6384','#36A2EB','#FFCE56','#4BC0C0','#9966FF','#FF9F40','#E7E9ED','#2ecc71','#C9CBCF'];
+
+  if (chartPizza) chartPizza.destroy();
+  chartPizza = new Chart(document.getElementById('chartSintPizza'), {
+    type: 'pie',
+    data: {
+      labels:   desp.map(c=>`${c.icone||''} ${c.categoria}`),
+      datasets: [{ data: desp.map(c=>Number(c.despesas)), backgroundColor: colors }],
+    },
+    options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'right' } } },
+  });
+
+  const ev = d.evolucao_mensal || [];
+  if (chartBarra) chartBarra.destroy();
+  chartBarra = new Chart(document.getElementById('chartSintBarra'), {
+    type: 'bar',
+    data: {
+      labels: ev.map(r=>r.label),
+      datasets: [
+        { label:'Receitas', data: ev.map(r=>Number(r.receitas)), backgroundColor:'rgba(16,185,129,0.8)', stack:'a' },
+        { label:'Despesas', data: ev.map(r=>Number(r.despesas)), backgroundColor:'rgba(239,68,68,0.8)',  stack:'a' },
+      ],
+    },
+    options: { responsive:true, maintainAspectRatio:false, scales:{ x:{stacked:true}, y:{stacked:false, beginAtZero:true} } },
+  });
+
+  document.getElementById('catTable').innerHTML = cats.map(c => `
+    <div class="flex items-center justify-between px-5 py-3 hover:bg-gray-50">
+      <div class="flex items-center gap-2">
+        <span class="text-lg">${c.icone||'🔖'}</span>
+        <span class="text-sm font-medium text-gray-700">${c.categoria}</span>
+      </div>
+      <div class="flex gap-6 text-sm">
+        <span class="text-brand-600">${fmt(c.receitas)}</span>
+        <span class="text-red-500">${fmt(c.despesas)}</span>
+        <span class="text-gray-400 w-10 text-right">${c.pct_despesas||0}%</span>
+      </div>
+    </div>`).join('') || '<div class="p-5 text-center text-gray-400 text-sm">Sem dados</div>';
+}
+
+function renderAnalitico(d) {
+  const txs = d.transacoes || [];
+  document.getElementById('txCount').textContent = `${txs.length} transações`;
+  document.getElementById('txTable').innerHTML = txs.map(t => `
+    <tr class="hover:bg-gray-50">
+      <td class="px-4 py-3 text-gray-500">${String(t.data_transacao).slice(0,10)}</td>
+      <td class="px-4 py-3 text-gray-800">${t.descricao}</td>
+      <td class="px-4 py-3 text-gray-500">${t.icone||''} ${t.categoria||'—'}</td>
+      <td class="px-4 py-3 text-gray-500">${t.forma_pagamento||'—'}</td>
+      <td class="px-4 py-3 text-right font-medium ${t.tipo==='Receita'?'text-brand-600':'text-red-500'}">
+        ${t.tipo==='Receita'?'+':'-'} ${fmt(t.valor)}
+      </td>
+    </tr>`).join('') || '<tr><td colspan="5" class="px-4 py-5 text-center text-gray-400">Nenhuma transação</td></tr>';
+}
+
+function exportar(formato, tipoRel) {
+  const periodo = document.getElementById('periodo').value;
+  let url = `${API}/api/reports/${formato}?periodo=${periodo}&tipo=${tipoRel||tipo}`;
+  if (periodo === 'custom') {
+    url += `&start=${document.getElementById('startDate').value}&end=${document.getElementById('endDate').value}`;
+  }
+  window.open(url + `#apikey=${token}`, '_blank');
+  // Trick: pass token via anchor; or use a form POST
+  const a = document.createElement('a');
+  a.href = url;
+  // For auth header we need a different approach — open in a fetch + blob
+  fetch(url, { headers: { apikey: token } })
+    .then(r => r.blob())
+    .then(blob => {
+      const burl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = burl;
+      link.download = `relatorio.${formato}`;
+      link.click();
+    });
+}
+
+function logout() {
+  fetch(`${API}/api/auth/logout`,{method:'POST',headers:{apikey:token}}).catch(()=>{});
+  localStorage.clear(); location.href='index.html';
+}
+
+// Auto-carregar com 30 dias
+loadReport();
+</script>
+</body></html>

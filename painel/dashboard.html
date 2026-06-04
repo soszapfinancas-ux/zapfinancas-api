@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ZapFinanças — Dashboard</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script>tailwind.config={theme:{extend:{colors:{brand:{50:'#ecfdf5',100:'#d1fae5',500:'#10b981',600:'#059669',700:'#047857',900:'#064e3b'}}}}}</script>
+</head>
+<body class="bg-gray-50 font-sans">
+
+<!-- Sidebar -->
+<div class="flex h-screen overflow-hidden">
+<aside class="w-64 bg-brand-900 text-white flex flex-col shrink-0">
+  <div class="p-6 border-b border-brand-700">
+    <div class="flex items-center gap-3">
+      <span class="text-2xl">💰</span>
+      <div><div class="font-bold text-lg">ZapFinanças</div>
+        <div id="userName" class="text-brand-300 text-xs"></div></div>
+    </div>
+  </div>
+  <nav class="flex-1 p-4 space-y-1 text-sm">
+    <a href="dashboard.html" class="flex items-center gap-3 px-3 py-2 rounded-lg bg-brand-700 font-medium">📊 Dashboard</a>
+    <a href="relatorios.html" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-brand-700">📋 Relatórios</a>
+    <a href="configuracoes.html" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-brand-700">⚙️ Configurações</a>
+  </nav>
+  <div class="p-4 border-t border-brand-700">
+    <div id="planBadge" class="text-xs text-brand-300 mb-3"></div>
+    <button onclick="logout()" class="w-full text-left text-sm text-brand-300 hover:text-white px-3 py-2">🚪 Sair</button>
+  </div>
+</aside>
+
+<!-- Main -->
+<main class="flex-1 overflow-y-auto">
+  <header class="bg-white border-b px-6 py-4 flex items-center justify-between">
+    <h1 class="text-xl font-bold text-gray-800">Dashboard</h1>
+    <div class="text-sm text-gray-500" id="lastUpdate"></div>
+  </header>
+
+  <div class="p-6 space-y-6">
+
+    <!-- Seletor de período -->
+    <div class="bg-white rounded-xl shadow-sm border p-4 flex flex-wrap items-center gap-2">
+      <span class="text-sm font-medium text-gray-600 mr-2">Período:</span>
+      <div class="flex gap-1 flex-wrap" id="periodBtns">
+        <button data-p="dia"    class="period-btn px-3 py-1.5 rounded-lg text-sm font-medium border">Hoje</button>
+        <button data-p="semana" class="period-btn px-3 py-1.5 rounded-lg text-sm font-medium border">Semana</button>
+        <button data-p="mes"    class="period-btn px-3 py-1.5 rounded-lg text-sm font-medium border active">Mês</button>
+        <button data-p="ano"    class="period-btn px-3 py-1.5 rounded-lg text-sm font-medium border">Ano</button>
+        <button data-p="custom" class="period-btn px-3 py-1.5 rounded-lg text-sm font-medium border">Personalizado</button>
+      </div>
+      <div id="customDates" class="hidden flex gap-2 items-center ml-2">
+        <input type="date" id="startDate" class="border rounded-lg px-2 py-1 text-sm">
+        <span class="text-gray-400">até</span>
+        <input type="date" id="endDate" class="border rounded-lg px-2 py-1 text-sm">
+        <button onclick="loadDashboard()" class="bg-brand-600 text-white px-3 py-1 rounded-lg text-sm">Aplicar</button>
+      </div>
+    </div>
+
+    <!-- Cards de resumo -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="bg-white rounded-xl shadow-sm border p-5">
+        <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Saldo Atual</p>
+        <p id="cSaldo" class="text-2xl font-bold mt-1 text-gray-800">—</p>
+      </div>
+      <div class="bg-white rounded-xl shadow-sm border p-5">
+        <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Receitas</p>
+        <p id="cReceitas" class="text-2xl font-bold mt-1 text-brand-600">—</p>
+      </div>
+      <div class="bg-white rounded-xl shadow-sm border p-5">
+        <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Despesas</p>
+        <p id="cDespesas" class="text-2xl font-bold mt-1 text-red-500">—</p>
+      </div>
+      <div class="bg-white rounded-xl shadow-sm border p-5">
+        <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Saldo do Período</p>
+        <p id="cSaldoPeriodo" class="text-2xl font-bold mt-1">—</p>
+      </div>
+    </div>
+
+    <!-- Gráficos -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <!-- Pizza / Barras empilhadas -->
+      <div class="bg-white rounded-xl shadow-sm border p-5">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="font-semibold text-gray-700">Despesas por Categoria</h2>
+          <div class="flex gap-1">
+            <button id="btnPizza" onclick="setChartType('pizza')"
+              class="px-2 py-1 text-xs rounded-lg bg-brand-600 text-white">🥧 Pizza</button>
+            <button id="btnBarra" onclick="setChartType('barra')"
+              class="px-2 py-1 text-xs rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200">📊 Barras</button>
+          </div>
+        </div>
+        <div class="relative h-64">
+          <canvas id="chartCategoria"></canvas>
+        </div>
+      </div>
+
+      <!-- Evolução mensal (barras empilhadas fixas) -->
+      <div class="bg-white rounded-xl shadow-sm border p-5">
+        <h2 class="font-semibold text-gray-700 mb-4">Evolução Mensal (6 meses)</h2>
+        <div class="relative h-64">
+          <canvas id="chartTrend"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Últimas transações -->
+    <div class="bg-white rounded-xl shadow-sm border">
+      <div class="flex items-center justify-between p-5 border-b">
+        <h2 class="font-semibold text-gray-700">Últimas Transações</h2>
+        <a href="relatorios.html" class="text-brand-600 text-sm hover:underline">Ver todos →</a>
+      </div>
+      <div id="txList" class="divide-y">
+        <div class="p-5 text-center text-gray-400 text-sm">Carregando...</div>
+      </div>
+    </div>
+
+  </div>
+</main>
+</div>
+
+<style>
+.period-btn.active{background:#059669;color:white;border-color:#059669}
+</style>
+
+<script>
+const API   = '';
+let token   = localStorage.getItem('zf_token');
+let user    = JSON.parse(localStorage.getItem('zf_user') || '{}');
+let periodo = 'mes';
+let chartCat, chartTrend, chartType = 'pizza';
+
+if (!token) location.href = 'index.html';
+
+document.getElementById('userName').textContent = user.nome?.split(' ')[0] || '';
+document.getElementById('planBadge').textContent = `Plano: ${user.plano || '—'}`;
+document.getElementById('lastUpdate').textContent = `Atualizado: ${new Date().toLocaleTimeString('pt-BR')}`;
+
+const fmt = v => 'R$ ' + Number(v).toLocaleString('pt-BR', {minimumFractionDigits:2});
+
+async function api(path) {
+  const r = await fetch(API + path, { headers: { apikey: token } });
+  if (r.status === 401) { logout(); return null; }
+  return r.json();
+}
+
+async function loadDashboard() {
+  let url = `/api/dashboard/summary?periodo=${periodo}`;
+  if (periodo === 'custom') {
+    const s = document.getElementById('startDate').value;
+    const e = document.getElementById('endDate').value;
+    if (!s || !e) return;
+    url += `&start=${s}&end=${e}`;
+  }
+
+  const d = await api(url);
+  if (!d) return;
+
+  const sp = Number(d.saldo_periodo);
+  document.getElementById('cSaldo').textContent        = fmt(d.saldo_atual);
+  document.getElementById('cReceitas').textContent     = fmt(d.total_receitas);
+  document.getElementById('cDespesas').textContent     = fmt(d.total_despesas);
+  document.getElementById('cSaldoPeriodo').textContent = fmt(sp);
+  document.getElementById('cSaldoPeriodo').className   =
+    `text-2xl font-bold mt-1 ${sp >= 0 ? 'text-brand-600' : 'text-red-500'}`;
+
+  renderChartCategoria(d.por_categoria);
+  renderTransacoes(d.ultimas_transacoes);
+}
+
+async function loadTrend() {
+  const d = await api('/api/dashboard/trend?meses=6');
+  if (!d) return;
+  if (chartTrend) chartTrend.destroy();
+  chartTrend = new Chart(document.getElementById('chartTrend'), {
+    type: 'bar',
+    data: {
+      labels:   d.map(r => r.label),
+      datasets: [
+        { label:'Receitas', data: d.map(r=>Number(r.receitas)), backgroundColor:'rgba(16,185,129,0.8)' },
+        { label:'Despesas', data: d.map(r=>Number(r.despesas)), backgroundColor:'rgba(239,68,68,0.8)' },
+      ],
+    },
+    options: { responsive:true, maintainAspectRatio:false, scales:{ x:{stacked:false}, y:{beginAtZero:true} } },
+  });
+}
+
+function renderChartCategoria(cats) {
+  const despesas = cats.filter(c => Number(c.total_despesas) > 0);
+  const labels   = despesas.map(c => `${c.icone||''} ${c.categoria}`);
+  const data     = despesas.map(c => Number(c.total_despesas));
+  const colors   = ['#FF6384','#36A2EB','#FFCE56','#4BC0C0','#9966FF','#FF9F40','#E7E9ED','#2ecc71','#C9CBCF'];
+
+  if (chartCat) chartCat.destroy();
+  chartCat = new Chart(document.getElementById('chartCategoria'), {
+    type: chartType === 'pizza' ? 'pie' : 'bar',
+    data: {
+      labels,
+      datasets: [{
+        data,
+        backgroundColor: colors,
+        ...(chartType !== 'pizza' ? { label: 'Despesas' } : {}),
+      }],
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ position: chartType==='pizza'?'right':'top' } },
+    },
+  });
+}
+
+function setChartType(t) {
+  chartType = t;
+  document.getElementById('btnPizza').className = `px-2 py-1 text-xs rounded-lg ${t==='pizza'?'bg-brand-600 text-white':'bg-gray-100 text-gray-600 hover:bg-gray-200'}`;
+  document.getElementById('btnBarra').className = `px-2 py-1 text-xs rounded-lg ${t==='barra'?'bg-brand-600 text-white':'bg-gray-100 text-gray-600 hover:bg-gray-200'}`;
+  loadDashboard();
+}
+
+function renderTransacoes(txs) {
+  if (!txs?.length) {
+    document.getElementById('txList').innerHTML = '<div class="p-5 text-center text-gray-400 text-sm">Nenhuma transação no período</div>';
+    return;
+  }
+  document.getElementById('txList').innerHTML = txs.map(t => `
+    <div class="flex items-center justify-between px-5 py-3 hover:bg-gray-50">
+      <div class="flex items-center gap-3">
+        <span class="text-xl">${t.categoria_icone||'💰'}</span>
+        <div>
+          <div class="text-sm font-medium text-gray-800">${t.descricao}</div>
+          <div class="text-xs text-gray-400">${t.categoria||'Sem categoria'} · ${String(t.data_transacao).slice(0,10)}</div>
+        </div>
+      </div>
+      <span class="font-semibold text-sm ${t.tipo==='Receita'?'text-brand-600':'text-red-500'}">
+        ${t.tipo==='Receita'?'+':'-'} ${fmt(t.valor)}
+      </span>
+    </div>`).join('');
+}
+
+// Seletor de período
+document.querySelectorAll('.period-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.period-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    periodo = btn.dataset.p;
+    document.getElementById('customDates').classList.toggle('hidden', periodo !== 'custom');
+    if (periodo !== 'custom') loadDashboard();
+  });
+});
+
+function logout() {
+  fetch(`${API}/api/auth/logout`,{method:'POST',headers:{apikey:token}}).catch(()=>{});
+  localStorage.clear();
+  location.href = 'index.html';
+}
+
+// Inicializa
+loadDashboard();
+loadTrend();
+</script>
+</body></html>

@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ZapFinanças — Painel Admin</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config={theme:{extend:{colors:{brand:{50:'#ecfdf5',100:'#d1fae5',500:'#10b981',600:'#059669',700:'#047857',900:'#064e3b'}}}}}</script>
+</head>
+<body class="bg-gray-100 font-sans">
+
+<!-- Header Admin -->
+<header class="bg-brand-900 text-white px-6 py-4 flex items-center justify-between shadow-lg">
+  <div class="flex items-center gap-3">
+    <span class="text-2xl">💰</span>
+    <div>
+      <span class="font-bold text-lg">ZapFinanças</span>
+      <span class="ml-2 text-xs bg-amber-500 text-white px-2 py-0.5 rounded-full font-medium">ADMIN</span>
+    </div>
+  </div>
+  <div class="flex items-center gap-4">
+    <input id="searchInput" type="text" placeholder="Buscar usuário ou e-mail..."
+      oninput="filterUsers()" class="bg-brand-800 text-white placeholder-brand-400 rounded-lg px-3 py-1.5 text-sm w-56 outline-none focus:ring-2 focus:ring-brand-400">
+    <button onclick="logout()" class="text-brand-300 hover:text-white text-sm">🚪 Sair</button>
+  </div>
+</header>
+
+<!-- Login Admin (mostrado se não autenticado) -->
+<div id="loginArea" class="hidden max-w-sm mx-auto mt-16 bg-white rounded-xl shadow-lg p-8">
+  <h2 class="font-bold text-xl text-gray-800 mb-6 text-center">Acesso Administrativo</h2>
+  <input id="adminToken" type="password" placeholder="Token de admin"
+    class="w-full border rounded-lg px-3 py-2 text-sm mb-3 focus:ring-2 focus:ring-brand-500 outline-none"
+    onkeydown="if(event.key==='Enter')adminLogin()">
+  <button onclick="adminLogin()"
+    class="w-full bg-brand-600 hover:bg-brand-700 text-white py-2 rounded-lg text-sm font-medium">Entrar</button>
+  <p id="loginErr" class="text-red-500 text-xs mt-2 text-center hidden"></p>
+</div>
+
+<!-- Dashboard Admin -->
+<div id="adminArea" class="hidden p-6 space-y-6 max-w-7xl mx-auto">
+
+  <!-- Stats -->
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4" id="statsArea">
+    <div class="bg-white rounded-xl shadow-sm border p-5">
+      <p class="text-xs font-medium text-gray-500 uppercase">Total de Contas</p>
+      <p id="statTotal" class="text-3xl font-bold mt-1 text-gray-800">—</p>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm border p-5">
+      <p class="text-xs font-medium text-gray-500 uppercase">Contas Ativas</p>
+      <p id="statAtivas" class="text-3xl font-bold mt-1 text-brand-600">—</p>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm border p-5">
+      <p class="text-xs font-medium text-gray-500 uppercase">Plano Familiar</p>
+      <p id="statFamiliar" class="text-3xl font-bold mt-1 text-blue-500">—</p>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm border p-5">
+      <p class="text-xs font-medium text-gray-500 uppercase">Inativas</p>
+      <p id="statInativas" class="text-3xl font-bold mt-1 text-gray-400">—</p>
+    </div>
+  </div>
+
+  <!-- Tabela de Contas -->
+  <div class="bg-white rounded-xl shadow-sm border">
+    <div class="flex items-center justify-between p-5 border-b">
+      <h2 class="font-semibold text-gray-700">Contas</h2>
+      <button onclick="loadAccounts()" class="text-sm text-brand-600 hover:text-brand-700">🔄 Atualizar</button>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">ID</th>
+            <th class="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Comprador</th>
+            <th class="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Plano</th>
+            <th class="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Membros</th>
+            <th class="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
+            <th class="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Cadastro</th>
+            <th class="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Ações</th>
+          </tr>
+        </thead>
+        <tbody id="accountTable" class="divide-y">
+          <tr><td colspan="7" class="px-4 py-5 text-center text-gray-400">Carregando...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<!-- Modal: Adicionar Membro -->
+<div id="memberModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+  <div class="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+    <h3 class="font-bold text-lg text-gray-800 mb-1">Adicionar Membro</h3>
+    <p class="text-xs text-gray-500 mb-4">Conta <span id="memberContaId" class="font-mono"></span></p>
+    <input type="hidden" id="memberContaIdInput">
+    <div class="space-y-3">
+      <div>
+        <label class="text-xs font-medium text-gray-600">RemoteJID (ex: 5541999999999@s.whatsapp.net)</label>
+        <input id="memberJid" type="text" placeholder="5541999999999@s.whatsapp.net"
+          class="w-full mt-1 border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 outline-none">
+      </div>
+      <div>
+        <label class="text-xs font-medium text-gray-600">Nome</label>
+        <input id="memberNome" type="text" placeholder="Nome do membro"
+          class="w-full mt-1 border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 outline-none">
+      </div>
+    </div>
+    <div class="flex gap-2 mt-5">
+      <button onclick="document.getElementById('memberModal').classList.add('hidden')"
+        class="flex-1 border rounded-lg py-2 text-sm text-gray-600 hover:bg-gray-50">Cancelar</button>
+      <button onclick="addMember()"
+        class="flex-1 bg-brand-600 hover:bg-brand-700 text-white rounded-lg py-2 text-sm font-medium">Adicionar</button>
+    </div>
+    <p id="memberErr" class="text-red-500 text-xs mt-2 hidden"></p>
+  </div>
+</div>
+
+<script>
+const API = '';
+let adminToken = localStorage.getItem('zf_admin_token') || '';
+let allAccounts = [];
+
+function adminLogin() {
+  const t = document.getElementById('adminToken').value.trim();
+  if (!t) return;
+  adminToken = t;
+  localStorage.setItem('zf_admin_token', t);
+  checkAndLoad();
+}
+
+async function adminApi(path, opts={}) {
+  const r = await fetch(API+path, {
+    headers:{ 'x-admin-token': adminToken, 'Content-Type':'application/json' },
+    ...opts,
+  });
+  if (r.status === 401) {
+    document.getElementById('loginErr').textContent = 'Token inválido';
+    document.getElementById('loginErr').classList.remove('hidden');
+    document.getElementById('loginArea').classList.remove('hidden');
+    document.getElementById('adminArea').classList.add('hidden');
+    return null;
+  }
+  return r.json();
+}
+
+async function checkAndLoad() {
+  const d = await adminApi('/admin/accounts');
+  if (!d) return;
+  document.getElementById('loginArea').classList.add('hidden');
+  document.getElementById('adminArea').classList.remove('hidden');
+  allAccounts = d;
+  renderStats(d);
+  renderAccounts(d);
+}
+
+function renderStats(accounts) {
+  const total    = accounts.length;
+  const ativas   = accounts.filter(a=>a.status==='ativo').length;
+  const familiar = accounts.filter(a=>a.plano==='Familiar').length;
+  document.getElementById('statTotal').textContent    = total;
+  document.getElementById('statAtivas').textContent   = ativas;
+  document.getElementById('statFamiliar').textContent = familiar;
+  document.getElementById('statInativas').textContent = total - ativas;
+}
+
+function statusBadge(s) {
+  const map = { ativo:'bg-green-100 text-green-700', inativo:'bg-gray-100 text-gray-500', cancelado:'bg-red-100 text-red-600', expirado:'bg-amber-100 text-amber-700' };
+  return `<span class="px-2 py-0.5 rounded-full text-xs font-medium ${map[s]||'bg-gray-100 text-gray-500'}">${s}</span>`;
+}
+
+function renderAccounts(accounts) {
+  document.getElementById('accountTable').innerHTML = accounts.length
+    ? accounts.map(a => `
+      <tr class="hover:bg-gray-50">
+        <td class="px-4 py-3 text-gray-400 text-xs font-mono">#${a.id}</td>
+        <td class="px-4 py-3">
+          <div class="font-medium text-gray-800">${a.nome_comprador||'—'}</div>
+          <div class="text-xs text-gray-400">${a.email_comprador||'—'}</div>
+        </td>
+        <td class="px-4 py-3">
+          <span class="px-2 py-0.5 rounded-full text-xs font-medium ${a.plano==='Familiar'?'bg-blue-100 text-blue-700':'bg-gray-100 text-gray-600'}">${a.plano}</span>
+        </td>
+        <td class="px-4 py-3 text-center text-gray-700">${a.membros||0}</td>
+        <td class="px-4 py-3">${statusBadge(a.status)}</td>
+        <td class="px-4 py-3 text-gray-400 text-xs">${a.created_at?a.created_at.slice(0,10):'—'}</td>
+        <td class="px-4 py-3">
+          <div class="flex gap-1 flex-wrap">
+            ${a.status!=='ativo'
+              ? `<button onclick="activate(${a.id})" class="text-xs bg-brand-600 hover:bg-brand-700 text-white px-2 py-1 rounded">✅ Ativar</button>`
+              : `<button onclick="deactivate(${a.id})" class="text-xs border border-red-300 text-red-500 hover:bg-red-50 px-2 py-1 rounded">⛔ Desativar</button>`}
+            ${a.plano==='Base'
+              ? `<button onclick="upgrade(${a.id})" class="text-xs bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded">⬆️ Familiar</button>`
+              : ''}
+            <button onclick="openMemberModal(${a.id})" class="text-xs border border-gray-300 text-gray-600 hover:bg-gray-50 px-2 py-1 rounded">👥 Membro</button>
+          </div>
+        </td>
+      </tr>`).join('')
+    : '<tr><td colspan="7" class="px-4 py-5 text-center text-gray-400">Nenhuma conta</td></tr>';
+}
+
+function filterUsers() {
+  const q = document.getElementById('searchInput').value.toLowerCase();
+  const filtered = allAccounts.filter(a =>
+    (a.nome_comprador||'').toLowerCase().includes(q) ||
+    (a.email_comprador||'').toLowerCase().includes(q)
+  );
+  renderAccounts(filtered);
+}
+
+async function loadAccounts() {
+  const d = await adminApi('/admin/accounts');
+  if (!d) return;
+  allAccounts = d;
+  renderStats(d);
+  renderAccounts(d);
+}
+
+async function activate(id) {
+  const r = await adminApi(`/admin/accounts/${id}/activate`, {method:'POST'});
+  if (r?.success) { toast('Conta ativada!'); loadAccounts(); }
+}
+
+async function deactivate(id) {
+  if (!confirm('Desativar esta conta?')) return;
+  const r = await adminApi(`/admin/accounts/${id}/deactivate`, {method:'POST'});
+  if (r?.success) { toast('Conta desativada.'); loadAccounts(); }
+}
+
+async function upgrade(id) {
+  if (!confirm('Atualizar para Plano Familiar?')) return;
+  const r = await adminApi(`/admin/accounts/${id}/upgrade`, {method:'POST'});
+  if (r?.success) { toast('Upgrade realizado!'); loadAccounts(); }
+}
+
+function openMemberModal(contaId) {
+  document.getElementById('memberContaId').textContent    = `#${contaId}`;
+  document.getElementById('memberContaIdInput').value     = contaId;
+  document.getElementById('memberJid').value              = '';
+  document.getElementById('memberNome').value             = '';
+  document.getElementById('memberErr').classList.add('hidden');
+  document.getElementById('memberModal').classList.remove('hidden');
+}
+
+async function addMember() {
+  const contaId  = document.getElementById('memberContaIdInput').value;
+  const remotejid = document.getElementById('memberJid').value.trim();
+  const nome      = document.getElementById('memberNome').value.trim();
+  if (!remotejid || !nome) {
+    document.getElementById('memberErr').textContent = 'Preencha todos os campos';
+    document.getElementById('memberErr').classList.remove('hidden');
+    return;
+  }
+  const r = await adminApi(`/admin/accounts/${contaId}/add-member`, {
+    method:'POST', body: JSON.stringify({ remotejid, nome, telefone: remotejid.split('@')[0] }),
+  });
+  if (!r) return;
+  if (r.error) {
+    document.getElementById('memberErr').textContent = r.error;
+    document.getElementById('memberErr').classList.remove('hidden');
+    return;
+  }
+  document.getElementById('memberModal').classList.add('hidden');
+  toast('Membro adicionado!');
+  loadAccounts();
+}
+
+function toast(msg) {
+  const el = Object.assign(document.createElement('div'), {
+    textContent: msg,
+    className: 'fixed bottom-4 right-4 bg-brand-600 text-white px-4 py-2 rounded-lg shadow-lg text-sm z-50',
+  });
+  document.body.appendChild(el);
+  setTimeout(()=>el.remove(), 3000);
+}
+
+function logout() {
+  localStorage.removeItem('zf_admin_token');
+  location.reload();
+}
+
+// Inicializa
+if (adminToken) {
+  checkAndLoad();
+} else {
+  document.getElementById('loginArea').classList.remove('hidden');
+}
+</script>
+</body></html>
