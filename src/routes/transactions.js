@@ -21,7 +21,13 @@ router.get('/recent', async (req, res) => {
        LEFT JOIN categorias      c  ON t.categoria_id       = c.id
        LEFT JOIN formas_pagamento fp ON t.forma_pagamento_id = fp.id
        LEFT JOIN carteiras        w  ON t.carteira_id        = w.id
-       WHERE t.usuario_id = $1
+       WHERE t.usuario_id = ANY(
+  CASE WHEN $2 = true THEN
+    ARRAY(SELECT id FROM usuarios WHERE conta_id = (SELECT conta_id FROM usuarios WHERE id = $1))
+  ELSE
+    ARRAY[$1::int]
+  END
+)
        ORDER BY t.data_transacao DESC, t.created_at DESC
        LIMIT 20`,
       [req.userId]
