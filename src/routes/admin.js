@@ -18,7 +18,14 @@ router.get('/accounts', async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT
-         c.id, c.status, c.email_comprador, c.nome_comprador,
+         c.id, c.status,
+         COALESCE(c.nome_comprador,
+           (SELECT u2.nome FROM usuarios u2 WHERE u2.conta_id = c.id ORDER BY u2.data_cadastro ASC LIMIT 1)
+         ) AS nome_comprador,
+         COALESCE(c.email_comprador,
+           (SELECT u2.remotejid FROM usuarios u2 WHERE u2.conta_id = c.id ORDER BY u2.data_cadastro ASC LIMIT 1)
+         ) AS email_comprador,
+         c.telefone_comprador,
          c.data_ativacao, c.data_expiracao, c.created_at,
          p.nome AS plano,
          COUNT(u.id) AS membros
@@ -32,6 +39,25 @@ router.get('/accounts', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erro ao listar contas' });
+  }
+});
+
+// PATCH /admin/accounts/:id  — edita nome/email do comprador manualmente
+router.patch('/accounts/:id', async (req, res) => {
+  const { nome_comprador, email_comprador } = req.body;
+  try {
+    const { rows } = await pool.query(
+      `UPDATE contas SET
+         nome_comprador  = COALESCE($2, nome_comprador),
+         email_comprador = COALESCE($3, email_comprador)
+       WHERE id = $1 RETURNING id, nome_comprador, email_comprador`,
+      [req.params.id, nome_comprador || null, email_comprador || null]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Conta não encontrada' });
+    res.json({ success: true, conta: rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro ao atualizar conta' });
   }
 });
 
