@@ -86,6 +86,34 @@
 
 </div>
 
+<!-- Modal: Editar Comprador -->
+<div id="editModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+  <div class="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+    <h3 class="font-bold text-lg text-gray-800 mb-1">Editar Comprador</h3>
+    <p class="text-xs text-gray-500 mb-4">Conta <span id="editContaId" class="font-mono"></span></p>
+    <input type="hidden" id="editContaIdInput">
+    <div class="space-y-3">
+      <div>
+        <label class="text-xs font-medium text-gray-600">Nome</label>
+        <input id="editNome" type="text" placeholder="Nome do comprador"
+          class="w-full mt-1 border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 outline-none">
+      </div>
+      <div>
+        <label class="text-xs font-medium text-gray-600">E-mail / Identificador</label>
+        <input id="editEmail" type="text" placeholder="email@exemplo.com"
+          class="w-full mt-1 border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 outline-none">
+      </div>
+    </div>
+    <div class="flex gap-2 mt-5">
+      <button onclick="document.getElementById('editModal').classList.add('hidden')"
+        class="flex-1 border rounded-lg py-2 text-sm text-gray-600 hover:bg-gray-50">Cancelar</button>
+      <button onclick="saveEdit()"
+        class="flex-1 bg-brand-600 hover:bg-brand-700 text-white rounded-lg py-2 text-sm font-medium">Salvar</button>
+    </div>
+    <p id="editErr" class="text-red-500 text-xs mt-2 hidden"></p>
+  </div>
+</div>
+
 <!-- Modal: Adicionar Membro -->
 <div id="memberModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
   <div class="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
@@ -173,11 +201,21 @@ function renderAccounts(accounts) {
       <tr class="hover:bg-gray-50">
         <td class="px-4 py-3 text-gray-400 text-xs font-mono">#${a.id}</td>
         <td class="px-4 py-3">
-          <div class="font-medium text-gray-800">${a.nome_comprador||'—'}</div>
-          <div class="text-xs text-gray-400">${a.email_comprador||'—'}</div>
+          <div class="flex items-center gap-2">
+            <div>
+              <div class="font-medium text-gray-800">${a.nome_comprador||'—'}</div>
+              <div class="text-xs text-gray-400">${a.email_comprador||'—'}</div>
+            </div>
+            <button onclick="openEditModal(${a.id},'${(a.nome_comprador||'').replace(/'/g,"\\'")}','${(a.email_comprador||'').replace(/'/g,"\\'")}' )"
+              class="text-gray-300 hover:text-gray-500 shrink-0" title="Editar comprador">✏️</button>
+          </div>
         </td>
         <td class="px-4 py-3">
-          <span class="px-2 py-0.5 rounded-full text-xs font-medium ${a.plano==='Familiar'?'bg-blue-100 text-blue-700':'bg-gray-100 text-gray-600'}">${a.plano}</span>
+          <span class="px-2 py-0.5 rounded-full text-xs font-medium ${
+            a.plano==='Familiar'?'bg-purple-100 text-purple-700':
+            (a.plano==='Duplo'||a.plano==='Casal')?'bg-blue-100 text-blue-700':
+            'bg-gray-100 text-gray-600'
+          }">${a.plano}</span>
         </td>
         <td class="px-4 py-3 text-center text-gray-700">${a.membros||0}</td>
         <td class="px-4 py-3">${statusBadge(a.status)}</td>
@@ -238,6 +276,39 @@ function openMemberModal(contaId) {
   document.getElementById('memberNome').value             = '';
   document.getElementById('memberErr').classList.add('hidden');
   document.getElementById('memberModal').classList.remove('hidden');
+}
+
+function openEditModal(id, nome, email) {
+  document.getElementById('editContaId').textContent  = `#${id}`;
+  document.getElementById('editContaIdInput').value   = id;
+  document.getElementById('editNome').value           = nome;
+  document.getElementById('editEmail').value          = email;
+  document.getElementById('editErr').classList.add('hidden');
+  document.getElementById('editModal').classList.remove('hidden');
+}
+
+async function saveEdit() {
+  const id    = document.getElementById('editContaIdInput').value;
+  const nome  = document.getElementById('editNome').value.trim();
+  const email = document.getElementById('editEmail').value.trim();
+  if (!nome && !email) {
+    document.getElementById('editErr').textContent = 'Preencha ao menos um campo';
+    document.getElementById('editErr').classList.remove('hidden');
+    return;
+  }
+  const r = await adminApi(`/admin/accounts/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ nome_comprador: nome || undefined, email_comprador: email || undefined }),
+  });
+  if (!r) return;
+  if (r.error) {
+    document.getElementById('editErr').textContent = r.error;
+    document.getElementById('editErr').classList.remove('hidden');
+    return;
+  }
+  document.getElementById('editModal').classList.add('hidden');
+  toast('Comprador atualizado!');
+  loadAccounts();
 }
 
 async function addMember() {
