@@ -18,11 +18,12 @@
     </div>
   </div>
   <nav class="flex-1 p-4 space-y-1 text-sm">
-    <a href="dashboard.html"   class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-brand-700">📊 Dashboard</a>
-    <a href="relatorios.html"  class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-brand-700">📋 Relatórios</a>
+    <a href="dashboard.html"     class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-brand-700">📊 Dashboard</a>
+    <a href="relatorios.html"    class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-brand-700">📋 Relatórios</a>
     <a href="configuracoes.html" class="flex items-center gap-3 px-3 py-2 rounded-lg bg-brand-700 font-medium">⚙️ Configurações</a>
   </nav>
   <div class="p-4 border-t border-brand-700">
+    <div id="planBadge" class="text-xs text-brand-300 mb-3"></div>
     <button onclick="logout()" class="w-full text-left text-sm text-brand-300 hover:text-white px-3 py-2">🚪 Sair</button>
   </div>
 </aside>
@@ -32,34 +33,94 @@
     <h1 class="text-xl font-bold text-gray-800">Configurações</h1>
   </header>
 
-  <div class="p-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+  <div class="p-6 space-y-6">
 
-    <!-- CATEGORIAS -->
-    <div class="bg-white rounded-xl shadow-sm border flex flex-col">
-      <div class="flex items-center justify-between p-5 border-b">
-        <h2 class="font-semibold text-gray-700">🏷️ Categorias</h2>
-        <button onclick="openCatModal()"
-          class="bg-brand-600 hover:bg-brand-700 text-white text-sm px-3 py-1.5 rounded-lg">+ Adicionar</button>
+    <!-- MINHA CONTA -->
+    <div class="bg-white rounded-xl shadow-sm border">
+      <div class="p-5 border-b">
+        <h2 class="font-semibold text-gray-700">👤 Minha Conta</h2>
       </div>
-      <div id="catList" class="flex-1 divide-y overflow-y-auto max-h-96">
+      <div id="contaInfo" class="p-5">
+        <div class="text-center text-gray-400 text-sm">Carregando...</div>
+      </div>
+    </div>
+
+    <!-- MEMBROS DO PLANO FAMILIAR -->
+    <div id="membrosSection" class="hidden bg-white rounded-xl shadow-sm border">
+      <div class="flex items-center justify-between p-5 border-b">
+        <div>
+          <h2 class="font-semibold text-gray-700">👥 Membros da Família</h2>
+          <p class="text-xs text-gray-400 mt-0.5" id="membrosSubtitle"></p>
+        </div>
+        <button id="btnAddMembro" onclick="openMembroModal()"
+          class="bg-brand-600 hover:bg-brand-700 text-white text-sm px-3 py-1.5 rounded-lg hidden">
+          + Adicionar Membro
+        </button>
+      </div>
+      <div id="membrosList" class="divide-y">
         <div class="p-4 text-center text-gray-400 text-sm">Carregando...</div>
       </div>
     </div>
 
-    <!-- FORMAS DE PAGAMENTO -->
-    <div class="bg-white rounded-xl shadow-sm border flex flex-col">
-      <div class="flex items-center justify-between p-5 border-b">
-        <h2 class="font-semibold text-gray-700">💳 Formas de Pagamento</h2>
-        <button onclick="openFpModal()"
-          class="bg-brand-600 hover:bg-brand-700 text-white text-sm px-3 py-1.5 rounded-lg">+ Adicionar</button>
-      </div>
-      <div id="fpList" class="flex-1 divide-y overflow-y-auto max-h-96">
-        <div class="p-4 text-center text-gray-400 text-sm">Carregando...</div>
-      </div>
-    </div>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
+      <!-- CATEGORIAS -->
+      <div class="bg-white rounded-xl shadow-sm border flex flex-col">
+        <div class="flex items-center justify-between p-5 border-b">
+          <h2 class="font-semibold text-gray-700">🏷️ Categorias</h2>
+          <button onclick="openCatModal()"
+            class="bg-brand-600 hover:bg-brand-700 text-white text-sm px-3 py-1.5 rounded-lg">+ Adicionar</button>
+        </div>
+        <div id="catList" class="flex-1 divide-y overflow-y-auto max-h-96">
+          <div class="p-4 text-center text-gray-400 text-sm">Carregando...</div>
+        </div>
+      </div>
+
+      <!-- FORMAS DE PAGAMENTO -->
+      <div class="bg-white rounded-xl shadow-sm border flex flex-col">
+        <div class="flex items-center justify-between p-5 border-b">
+          <h2 class="font-semibold text-gray-700">💳 Formas de Pagamento</h2>
+          <button onclick="openFpModal()"
+            class="bg-brand-600 hover:bg-brand-700 text-white text-sm px-3 py-1.5 rounded-lg">+ Adicionar</button>
+        </div>
+        <div id="fpList" class="flex-1 divide-y overflow-y-auto max-h-96">
+          <div class="p-4 text-center text-gray-400 text-sm">Carregando...</div>
+        </div>
+      </div>
+
+    </div>
   </div>
 </main>
+</div>
+
+<!-- Modal Adicionar Membro -->
+<div id="membroModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+  <div class="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+    <h3 class="font-bold text-lg text-gray-800 mb-1">Adicionar Membro</h3>
+    <p class="text-xs text-gray-500 mb-4">O membro deve enviar uma mensagem para o bot antes de ser adicionado.</p>
+    <div class="space-y-3">
+      <div>
+        <label class="text-xs font-medium text-gray-600">Número do WhatsApp</label>
+        <div class="flex mt-1">
+          <span class="inline-flex items-center px-3 border border-r-0 border-gray-300 rounded-l-lg bg-gray-50 text-gray-500 text-sm">+55</span>
+          <input id="membroPhone" type="tel" placeholder="41 9 9999-9999"
+            class="flex-1 px-3 py-2 border border-gray-300 rounded-r-lg text-sm focus:ring-2 focus:ring-brand-500 outline-none">
+        </div>
+      </div>
+      <div>
+        <label class="text-xs font-medium text-gray-600">Nome</label>
+        <input id="membroNome" type="text" placeholder="Nome do membro"
+          class="w-full mt-1 border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 outline-none">
+      </div>
+    </div>
+    <div class="flex gap-2 mt-5">
+      <button onclick="closeMembroModal()"
+        class="flex-1 border rounded-lg py-2 text-sm text-gray-600 hover:bg-gray-50">Cancelar</button>
+      <button onclick="addMembro()"
+        class="flex-1 bg-brand-600 hover:bg-brand-700 text-white rounded-lg py-2 text-sm font-medium">Adicionar</button>
+    </div>
+    <p id="membroErr" class="text-red-500 text-xs mt-2 hidden"></p>
+  </div>
 </div>
 
 <!-- Modal Categoria -->
@@ -127,7 +188,152 @@ const token = localStorage.getItem('zf_token');
 const user  = JSON.parse(localStorage.getItem('zf_user') || '{}');
 if (!token) location.href = 'index.html';
 
-document.getElementById('userName').textContent = user.nome?.split(' ')[0] || '';
+document.getElementById('userName').textContent  = user.nome?.split(' ')[0] || '';
+document.getElementById('planBadge').textContent = `Plano: ${user.plano || '—'}`;
+
+// ── MINHA CONTA ────────────────────────────────────────────────────────────────
+
+let contaData = null;
+
+const fmtDate = d => d ? new Date(d).toLocaleDateString('pt-BR') : '—';
+
+const planColor = plano => ({
+  Familiar: 'bg-purple-100 text-purple-700',
+  Duplo:    'bg-blue-100 text-blue-700',
+  Casal:    'bg-blue-100 text-blue-700',
+  Base:     'bg-gray-100 text-gray-700',
+})[plano] || 'bg-gray-100 text-gray-700';
+
+const statusColor = s => ({
+  ativo:    'bg-green-100 text-green-700',
+  inativo:  'bg-gray-100 text-gray-500',
+  expirado: 'bg-amber-100 text-amber-700',
+  cancelado:'bg-red-100 text-red-600',
+})[s] || 'bg-gray-100 text-gray-500';
+
+async function loadConta() {
+  const d = await api('/api/account');
+  if (!d) return;
+  contaData = d;
+
+  const { conta, membros } = d;
+
+  document.getElementById('contaInfo').innerHTML = `
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div>
+        <p class="text-xs font-medium text-gray-500 uppercase mb-1">Nome</p>
+        <p class="text-sm font-semibold text-gray-800">${conta.nome_comprador || user.nome || '—'}</p>
+      </div>
+      <div>
+        <p class="text-xs font-medium text-gray-500 uppercase mb-1">WhatsApp</p>
+        <p class="text-sm font-mono text-gray-700">${conta.telefone_comprador || user.remotejid?.split('@')[0] || '—'}</p>
+      </div>
+      <div>
+        <p class="text-xs font-medium text-gray-500 uppercase mb-1">Plano</p>
+        <span class="px-2 py-0.5 rounded-full text-xs font-medium ${planColor(conta.plano)}">${conta.plano}</span>
+      </div>
+      <div>
+        <p class="text-xs font-medium text-gray-500 uppercase mb-1">Status</p>
+        <span class="px-2 py-0.5 rounded-full text-xs font-medium ${statusColor(conta.status)}">${conta.status}</span>
+      </div>
+      <div>
+        <p class="text-xs font-medium text-gray-500 uppercase mb-1">Ativação</p>
+        <p class="text-sm text-gray-700">${fmtDate(conta.data_ativacao)}</p>
+      </div>
+      <div>
+        <p class="text-xs font-medium text-gray-500 uppercase mb-1">Validade</p>
+        <p class="text-sm text-gray-700">${fmtDate(conta.data_expiracao)}</p>
+      </div>
+    </div>`;
+
+  const maxMembros   = Number(conta.max_telefones) || 1;
+  const totalMembros = membros.length;
+  const temMultiUser = maxMembros > 1;
+
+  document.getElementById('membrosSection').classList.toggle('hidden', !temMultiUser);
+
+  if (temMultiUser) {
+    document.getElementById('membrosSubtitle').textContent =
+      `${totalMembros} de ${maxMembros} vaga${maxMembros > 1 ? 's' : ''} usada${totalMembros !== 1 ? 's' : ''}`;
+
+    const podeAdicionar = totalMembros < maxMembros;
+    document.getElementById('btnAddMembro').classList.toggle('hidden', !podeAdicionar);
+
+    renderMembros(membros);
+  }
+}
+
+function renderMembros(membros) {
+  document.getElementById('membrosList').innerHTML = membros.length
+    ? membros.map(m => `
+        <div class="flex items-center justify-between px-5 py-3 hover:bg-gray-50">
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-full bg-brand-100 flex items-center justify-center text-brand-700 font-bold text-sm">
+              ${(m.nome || '?')[0].toUpperCase()}
+            </div>
+            <div>
+              <div class="text-sm font-medium text-gray-800">${m.nome}</div>
+              <div class="text-xs text-gray-400">${m.remotejid?.split('@')[0] || '—'}
+                ${m.tipo === 'comprador' ? ' · <span class="text-brand-600 font-medium">Titular</span>' : ''}
+              </div>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-xs px-2 py-0.5 rounded-full ${m.ativo ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}">
+              ${m.ativo ? 'ativo' : 'inativo'}
+            </span>
+            ${m.tipo !== 'comprador' ? `
+              <button onclick="removeMembro(${m.id},'${m.nome}')"
+                class="text-xs text-red-400 hover:text-red-600 px-2 py-1">🗑️</button>` : ''}
+          </div>
+        </div>`).join('')
+    : '<div class="p-5 text-center text-gray-400 text-sm">Nenhum membro cadastrado</div>';
+}
+
+function openMembroModal() {
+  document.getElementById('membroPhone').value = '';
+  document.getElementById('membroNome').value  = '';
+  document.getElementById('membroErr').classList.add('hidden');
+  document.getElementById('membroModal').classList.remove('hidden');
+  setTimeout(() => document.getElementById('membroPhone').focus(), 50);
+}
+function closeMembroModal() { document.getElementById('membroModal').classList.add('hidden'); }
+
+async function addMembro() {
+  const phoneRaw = document.getElementById('membroPhone').value.replace(/\D/g, '');
+  const nome     = document.getElementById('membroNome').value.trim();
+  const errEl    = document.getElementById('membroErr');
+
+  if (phoneRaw.length < 10 || !nome) {
+    errEl.textContent = 'Preencha o número (com DDD) e o nome.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  const remotejid = `55${phoneRaw}@s.whatsapp.net`;
+  const r = await api('/api/account/members', {
+    method: 'POST',
+    body: JSON.stringify({ remotejid, nome }),
+  });
+  if (!r) return;
+  if (r.error) {
+    errEl.textContent = r.error;
+    errEl.classList.remove('hidden');
+    return;
+  }
+  closeMembroModal();
+  toast('Membro adicionado!');
+  loadConta();
+}
+
+async function removeMembro(id, nome) {
+  if (!confirm(`Remover ${nome} da família?`)) return;
+  const r = await api(`/api/account/members/${id}`, { method: 'DELETE' });
+  if (!r) return;
+  if (r.error) { toast(r.error); return; }
+  toast('Membro removido.');
+  loadConta();
+}
 
 async function api(path, opts={}) {
   const r = await fetch(API+path, { headers:{ apikey:token, 'Content-Type':'application/json' }, ...opts });
@@ -264,11 +470,21 @@ async function deleteFp(id) {
   loadFp();
 }
 
+function toast(msg, ok=true) {
+  const el = Object.assign(document.createElement('div'), {
+    textContent: msg,
+    className: `fixed bottom-4 right-4 ${ok?'bg-brand-600':'bg-red-500'} text-white px-4 py-2 rounded-lg shadow-lg text-sm z-50`,
+  });
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
 function logout() {
   fetch(`${API}/api/auth/logout`,{method:'POST',headers:{apikey:token}}).catch(()=>{});
   localStorage.clear(); location.href='index.html';
 }
 
+loadConta();
 loadCats();
 loadFp();
 </script>
