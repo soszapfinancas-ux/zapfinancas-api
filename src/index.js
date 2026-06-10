@@ -26,9 +26,13 @@ app.use('/api/dashboard',       require('./routes/dashboard'));
 app.use('/api/charts',          require('./routes/charts'));
 app.use('/api/reminders',       require('./routes/reminders'));
 app.use('/api/reports',         require('./routes/reports'));
+app.use('/api/account',         require('./routes/account'));
 
 // Webhook Hotmart
 app.use('/webhook/hotmart', require('./routes/hotmart'));
+
+// Webhook Asaas (pagamento direto / renovação)
+app.use('/webhook/asaas', require('./routes/asaas'));
 
 // Admin
 app.use('/admin', require('./routes/admin'));
@@ -38,6 +42,9 @@ app.get('/health', (_, res) => res.json({ status: 'ok', version: '2.0', ts: new 
 
 // Job de lembretes (aviso antecipado + vencimento)
 require('./jobs/reminders').iniciarJob();
+
+// Job de expiração de planos (diário às 03:00)
+require('./jobs/expire-plans').iniciarJob();
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`ZapFinanças API v2 rodando na porta ${PORT}`));
