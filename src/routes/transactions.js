@@ -5,6 +5,50 @@ const auth    = require('../middleware/auth');
 
 router.use(auth);
 
+// GET /api/transactions  — lista todas as transações do usuário
+// Retorna aliases data_registro e categoria_name para compatibilidade com o fluxo n8n Relatorio Detalhado
+router.get('/', async (req, res) => {
+  const { tipo, categoria, start, end, limit = 500 } = req.query;
+  const params  = [req.userId];
+  const filters = [];
+
+  if (tipo)      { params.push(tipo);      filters.push(`t.tipo = $${params.length}`); }
+  if (categoria) { params.push(categoria); filters.push(`c.nome = $${params.length}`); }
+  if (start)     { params.push(start);     filters.push(`t.data_transacao >= $${params.length}`); }
+  if (end)       { params.push(end);       filters.push(`t.data_transacao <= $${params.length}`); }
+
+  const where = filters.length ? 'AND ' + filters.join(' AND ') : '';
+  const cap   = Math.min(Math.max(parseInt(limit) || 500, 1), 2000);
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         t.id, t.descricao, t.valor, t.tipo,
+         t.data_transacao,
+         t.data_transacao AS data_registro,
+         t.status, t.created_at,
+         c.nome  AS categoria,
+         c.nome  AS categoria_name,
+         c.icone AS categoria_icone,
+         c.cor   AS categoria_cor,
+         fp.nome AS forma_pagamento,
+         w.nome  AS carteira
+       FROM transacoes t
+       LEFT JOIN categorias       c  ON t.categoria_id       = c.id
+       LEFT JOIN formas_pagamento fp ON t.forma_pagamento_id = fp.id
+       LEFT JOIN carteiras        w  ON t.carteira_id        = w.id
+       WHERE t.usuario_id = $1 ${where}
+       ORDER BY t.data_transacao DESC, t.created_at DESC
+       LIMIT ${cap}`,
+      params
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro ao buscar transações' });
+  }
+});
+
 // GET /api/transactions/recent
 router.get('/recent', async (req, res) => {
   try {
@@ -21,13 +65,7 @@ router.get('/recent', async (req, res) => {
        LEFT JOIN categorias      c  ON t.categoria_id       = c.id
        LEFT JOIN formas_pagamento fp ON t.forma_pagamento_id = fp.id
        LEFT JOIN carteiras        w  ON t.carteira_id        = w.id
-       WHERE t.usuario_id = ANY(
-  CASE WHEN $2 = true THEN
-    ARRAY(SELECT id FROM usuarios WHERE conta_id = (SELECT conta_id FROM usuarios WHERE id = $1))
-  ELSE
-    ARRAY[$1::int]
-  END
-)
+       WHERE t.usuario_id = $1
        ORDER BY t.data_transacao DESC, t.created_at DESC
        LIMIT 20`,
       [req.userId]
@@ -72,6 +110,13 @@ router.post('/', async (req, res) => {
       error: 'Campos obrigatórios: descricao, valor, tipo, carteira_id, categoria_id, data_transacao',
     });
 
+  // Normaliza formato DD/MM/YYYY → YYYY-MM-DD (n8n envia formato brasileiro)
+  let dataISO = data_transacao;
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(data_transacao)) {
+    const [d, m, y] = data_transacao.split('/');
+    dataISO = `${y}-${m}-${d}`;
+  }
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -82,7 +127,7 @@ router.post('/', async (req, res) => {
           descricao, valor, tipo, data_transacao, status)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
       [req.userId, carteira_id, categoria_id, forma_pagamento_id || null,
-       descricao, Math.abs(Number(valor)), tipo, data_transacao, status]
+       descricao, Math.abs(Number(valor)), tipo, dataISO, status]
     );
 
     const delta = tipo === 'Receita' ? Math.abs(Number(valor)) : -Math.abs(Number(valor));
