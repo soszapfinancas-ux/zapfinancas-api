@@ -27,12 +27,15 @@ router.get('/accounts', async (req, res) => {
          ) AS email_comprador,
          c.telefone_comprador,
          c.data_ativacao, c.data_expiracao, c.created_at,
+         c.plano_id,
+         c.max_membros,
          p.nome AS plano,
+         p.max_telefones,
          COUNT(u.id) AS membros
        FROM contas c
        JOIN planos p ON c.plano_id = p.id
        LEFT JOIN usuarios u ON u.conta_id = c.id
-       GROUP BY c.id, p.nome
+       GROUP BY c.id, p.nome, p.max_telefones
        ORDER BY c.created_at DESC`
     );
     res.json(rows);
@@ -145,6 +148,99 @@ router.post('/accounts/:contaId/add-member', async (req, res) => {
     }
     console.error(err);
     res.status(500).json({ error: 'Erro ao adicionar membro' });
+  }
+});
+
+// PATCH /admin/accounts/:id/plan  — altera o plano da conta
+router.patch('/accounts/:id/plan', async (req, res) => {
+  const { plano_id } = req.body;
+  if (!plano_id) return res.status(400).json({ error: 'plano_id obrigatório' });
+  try {
+    const { rows } = await pool.query(
+      'UPDATE contas SET plano_id=$2 WHERE id=$1 RETURNING id, plano_id',
+      [req.params.id, plano_id]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Conta não encontrada' });
+    res.json({ success: true, conta: rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro ao alterar plano' });
+  }
+});
+
+// PATCH /admin/accounts/:id/max-membros  — define limite customizado de membros (null = usar padrão do plano)
+router.patch('/accounts/:id/max-membros', async (req, res) => {
+  const { max_membros } = req.body;
+  try {
+    const { rows } = await pool.query(
+      'UPDATE contas SET max_membros=$2 WHERE id=$1 RETURNING id, max_membros',
+      [req.params.id, max_membros != null ? Number(max_membros) : null]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Conta não encontrada' });
+    res.json({ success: true, conta: rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro ao atualizar limite de membros' });
+  }
+});
+
+// GET /admin/plans  — lista planos disponíveis
+router.get('/plans', async (_req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT id, nome, max_telefones, is_motorista, descricao FROM planos ORDER BY id'
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro ao listar planos' });
+  }
+});
+
+// GET /admin/hotmart-products  — lista mapeamentos de produtos Hotmart
+router.get('/hotmart-products', async (_req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT hp.hotmart_product_id, hp.nome, hp.ativo, hp.created_at,
+              p.id AS plano_id, p.nome AS plano_nome
+       FROM hotmart_produtos hp
+       JOIN planos p ON hp.plano_id = p.id
+       ORDER BY hp.created_at DESC`
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro ao listar produtos Hotmart' });
+  }
+});
+
+// POST /admin/hotmart-products  — cria ou atualiza mapeamento de produto
+router.post('/hotmart-products', async (req, res) => {
+  const { hotmart_product_id, plano_id, nome } = req.body;
+  if (!hotmart_product_id || !plano_id || !nome)
+    return res.status(400).json({ error: 'Campos obrigatórios: hotmart_product_id, plano_id, nome' });
+  try {
+    await pool.query(
+      `INSERT INTO hotmart_produtos (hotmart_product_id, plano_id, nome)
+       VALUES ($1,$2,$3)
+       ON CONFLICT (hotmart_product_id) DO UPDATE SET plano_id=$2, nome=$3, ativo=TRUE`,
+      [hotmart_product_id, plano_id, nome]
+    );
+    res.status(201).json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro ao salvar produto Hotmart' });
+  }
+});
+
+// DELETE /admin/hotmart-products/:id  — remove mapeamento de produto
+router.delete('/hotmart-products/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM hotmart_produtos WHERE hotmart_product_id=$1', [req.params.id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro ao remover produto Hotmart' });
   }
 });
 
