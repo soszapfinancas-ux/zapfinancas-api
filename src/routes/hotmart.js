@@ -4,17 +4,20 @@ const router  = express.Router();
 const pool    = require('../db');
 const axios   = require('axios');
 
-async function notificarAtivacao(telefone, nome, contaId) {
+async function notificarAtivacao(telefone, nome, contaId, email, planoNome, productId) {
   const webhookUrl = process.env.N8N_WEBHOOK_ATIVACAO;
   if (!webhookUrl) return;
 
   const payload = {
-    evento:    'usuario_ativado',
-    timestamp: new Date().toISOString(),
-    dominio:   process.env.APP_URL || 'https://zapfinancas.orbitarosa.com',
-    id:        contaId,
+    evento:       'usuario_ativado',
+    timestamp:    new Date().toISOString(),
+    dominio:      process.env.APP_URL || 'https://zapfinancas.orbitarosa.com',
+    id:           contaId,
     nome,
-    telefone:  telefone.replace(/\D/g, ''),
+    telefone:     telefone.replace(/\D/g, ''),
+    email,
+    plano_nome:   planoNome,
+    produto_id:   productId,
     mensagem_ativacao: {
       titulo:   'Sua conta foi ativada!',
       mensagem: `Olá, ${nome.split(' ')[0]}! 🎉 Sua conta no *ZapFinanças* foi ativada com sucesso!\n\nAgora você já pode registrar seus gastos e receitas diretamente aqui pelo WhatsApp.\n\nAcesse também o painel web para ver seus relatórios e gráficos:`,
@@ -131,7 +134,7 @@ router.post('/', async (req, res) => {
 
     await client.query('COMMIT');
 
-    notificarAtivacao(telefone, nome, contaId);
+    notificarAtivacao(telefone, nome, contaId, email, planoNome, productId);
     res.json({ success: true });
   } catch (err) {
     await client.query('ROLLBACK');
