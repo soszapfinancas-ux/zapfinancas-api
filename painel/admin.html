@@ -58,7 +58,15 @@
   <!-- Tabela de Contas -->
   <div class="bg-white rounded-xl shadow-sm border">
     <div class="flex items-center justify-between p-5 border-b">
-      <h2 class="font-semibold text-gray-700">Contas</h2>
+      <div class="flex items-center gap-3">
+        <h2 class="font-semibold text-gray-700">Contas</h2>
+        <div class="flex bg-gray-100 rounded-lg p-0.5 text-xs font-medium">
+          <button id="tabAtivas" onclick="switchAccountsTab('ativas')"
+            class="px-3 py-1.5 rounded-md bg-white shadow-sm text-gray-800">Contas</button>
+          <button id="tabExcluidas" onclick="switchAccountsTab('excluidas')"
+            class="px-3 py-1.5 rounded-md text-gray-500 hover:text-gray-700">Excluídas</button>
+        </div>
+      </div>
       <button onclick="loadAccounts()" class="text-sm text-brand-600 hover:text-brand-700">Atualizar</button>
     </div>
     <div class="overflow-x-auto">
@@ -215,6 +223,7 @@ const API = '';
 let adminToken = localStorage.getItem('zf_admin_token') || '';
 let allAccounts = [];
 let allPlans = [];
+let accountsTab = 'ativas'; // 'ativas' | 'excluidas'
 
 function adminLogin() {
   const t = document.getElementById('adminToken').value.trim();
@@ -239,9 +248,13 @@ async function adminApi(path, opts={}) {
   return r.json();
 }
 
+function accountsPath() {
+  return accountsTab === 'excluidas' ? '/admin/accounts?excluidas=true' : '/admin/accounts';
+}
+
 async function checkAndLoad() {
   const [accounts, plans] = await Promise.all([
-    adminApi('/admin/accounts'),
+    adminApi(accountsPath()),
     adminApi('/admin/plans'),
   ]);
   if (!accounts) return;
@@ -313,15 +326,18 @@ function renderAccounts(accounts) {
         <td class="px-4 py-3 text-gray-400 text-xs">${a.created_at?a.created_at.slice(0,10):'—'}</td>
         <td class="px-4 py-3">
           <div class="flex gap-1 flex-wrap">
-            ${a.status!=='ativo'
-              ? `<button onclick="activate(${a.id})" class="text-xs bg-brand-600 hover:bg-brand-700 text-white px-2 py-1 rounded">Ativar</button>`
-              : `<button onclick="deactivate(${a.id})" class="text-xs border border-red-300 text-red-500 hover:bg-red-50 px-2 py-1 rounded">Desativar</button>`}
-            <button onclick="openMemberModal(${a.id})" class="text-xs border border-gray-300 text-gray-600 hover:bg-gray-50 px-2 py-1 rounded">+ Membro</button>
+            ${accountsTab === 'excluidas'
+              ? `<button onclick="restoreAccount(${a.id})" class="text-xs bg-brand-600 hover:bg-brand-700 text-white px-2 py-1 rounded">Restaurar</button>`
+              : `${a.status!=='ativo'
+                  ? `<button onclick="activate(${a.id})" class="text-xs bg-brand-600 hover:bg-brand-700 text-white px-2 py-1 rounded">Ativar</button>`
+                  : `<button onclick="deactivate(${a.id})" class="text-xs border border-red-300 text-red-500 hover:bg-red-50 px-2 py-1 rounded">Desativar</button>`}
+                 <button onclick="openMemberModal(${a.id})" class="text-xs border border-gray-300 text-gray-600 hover:bg-gray-50 px-2 py-1 rounded">+ Membro</button>
+                 <button onclick="excludeAccount(${a.id})" class="text-xs border border-gray-300 text-gray-500 hover:bg-gray-50 px-2 py-1 rounded">Excluir</button>`}
           </div>
         </td>
       </tr>`;
       }).join('')
-    : '<tr><td colspan="8" class="px-4 py-5 text-center text-gray-400">Nenhuma conta</td></tr>';
+    : `<tr><td colspan="8" class="px-4 py-5 text-center text-gray-400">${accountsTab==='excluidas' ? 'Nenhuma conta excluída' : 'Nenhuma conta'}</td></tr>`;
 }
 
 function filterUsers() {
@@ -334,11 +350,19 @@ function filterUsers() {
 }
 
 async function loadAccounts() {
-  const d = await adminApi('/admin/accounts');
+  const d = await adminApi(accountsPath());
   if (!d) return;
   allAccounts = d;
-  renderStats(d);
+  if (accountsTab === 'ativas') renderStats(d);
   renderAccounts(d);
+}
+
+function switchAccountsTab(tab) {
+  accountsTab = tab;
+  document.getElementById('tabAtivas').className    = tab==='ativas'    ? 'px-3 py-1.5 rounded-md bg-white shadow-sm text-gray-800' : 'px-3 py-1.5 rounded-md text-gray-500 hover:text-gray-700';
+  document.getElementById('tabExcluidas').className = tab==='excluidas' ? 'px-3 py-1.5 rounded-md bg-white shadow-sm text-gray-800' : 'px-3 py-1.5 rounded-md text-gray-500 hover:text-gray-700';
+  document.getElementById('searchInput').value = '';
+  loadAccounts();
 }
 
 async function activate(id) {
@@ -350,6 +374,17 @@ async function deactivate(id) {
   if (!confirm('Desativar esta conta?')) return;
   const r = await adminApi(`/admin/accounts/${id}/deactivate`, {method:'POST'});
   if (r?.success) { toast('Conta desativada.'); loadAccounts(); }
+}
+
+async function excludeAccount(id) {
+  if (!confirm('Excluir esta conta? Ela vai sumir da lista de Contas, mas os dados do comprador e o histórico continuam guardados — dá pra restaurar depois em "Excluídas".')) return;
+  const r = await adminApi(`/admin/accounts/${id}`, {method:'DELETE'});
+  if (r?.success) { toast('Conta excluída.'); loadAccounts(); }
+}
+
+async function restoreAccount(id) {
+  const r = await adminApi(`/admin/accounts/${id}/restore`, {method:'POST'});
+  if (r?.success) { toast('Conta restaurada.'); loadAccounts(); }
 }
 
 function openEditModal(id, nome, email, planoId, maxMembros) {
