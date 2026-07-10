@@ -135,7 +135,9 @@ router.post('/', async (req, res) => {
            plano_id = $2,
            data_ativacao = NOW(),
            data_expiracao = NOW() + INTERVAL '1 year',
-           asaas_customer_id = $3
+           asaas_customer_id = $3,
+           excluida = FALSE,
+           excluida_em = NULL
          WHERE id = $1`,
         [contaId, planoId, customerId || null]
       );

@@ -4,6 +4,13 @@ const router  = express.Router();
 const pool    = require('../db');
 const axios   = require('axios');
 
+// Mesma regra usada em auth.js e asaas.js: remotejid sempre inclui o DDI 55
+function normalizePhoneDigits(phone) {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (!digits) return '';
+  return digits.length >= 12 ? digits : `55${digits}`;
+}
+
 async function notificarAtivacao(telefone, nome, contaId, email, planoNome, productId) {
   const webhookUrl = process.env.N8N_WEBHOOK_ATIVACAO;
   if (!webhookUrl) return;
@@ -100,7 +107,9 @@ router.post('/', async (req, res) => {
            plano_id = $2,
            hotmart_transaction_id = $3,
            data_ativacao = NOW(),
-           data_expiracao = NOW() + INTERVAL '1 year'
+           data_expiracao = NOW() + INTERVAL '1 year',
+           excluida = FALSE,
+           excluida_em = NULL
          WHERE id = $1`,
         [contaId, planoId, txId]
       );
@@ -116,12 +125,16 @@ router.post('/', async (req, res) => {
       contaId = contaRes.rows[0].id;
 
       // Vincula usuário que já interagiu com o bot pelo telefone
-      await client.query(
+      const telefoneNormalizado = normalizePhoneDigits(telefone);
+      const vinculo = await client.query(
         `UPDATE usuarios SET conta_id = $1, ativo = TRUE
          WHERE remotejid LIKE $2
          AND conta_id IN (SELECT id FROM contas WHERE status = 'inativo')`,
-        [contaId, `${telefone.replace(/\D/g, '')}%`]
+        [contaId, `${telefoneNormalizado}%`]
       );
+      if (vinculo.rowCount === 0) {
+        console.warn(`[Hotmart] Nenhum usuário vinculado pelo telefone ${telefone} (normalizado: ${telefoneNormalizado}) na conta ${contaId}`);
+      }
     }
 
     // Log da compra

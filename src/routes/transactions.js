@@ -23,7 +23,9 @@ router.get('/', async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT
-         t.id, t.descricao, t.valor, t.tipo,
+         t.id,
+         (SELECT COUNT(*) FROM transacoes t2 WHERE t2.usuario_id = t.usuario_id AND t2.id <= t.id) AS numero_transacao,
+         t.descricao, t.valor, t.tipo,
          t.data_transacao,
          t.data_transacao AS data_registro,
          t.status, t.created_at,
@@ -54,7 +56,9 @@ router.get('/recent', async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT
-         t.id, t.descricao, t.valor, t.tipo,
+         t.id,
+         (SELECT COUNT(*) FROM transacoes t2 WHERE t2.usuario_id = t.usuario_id AND t2.id <= t.id) AS numero_transacao,
+         t.descricao, t.valor, t.tipo,
          t.data_transacao, t.status, t.created_at,
          c.nome  AS categoria,
          c.icone AS categoria_icone,
@@ -81,7 +85,9 @@ router.get('/recent', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT t.*, c.nome AS categoria_nome, fp.nome AS forma_pagamento_nome
+      `SELECT t.*,
+         (SELECT COUNT(*) FROM transacoes t2 WHERE t2.usuario_id = t.usuario_id AND t2.id <= t.id) AS numero_transacao,
+         c.nome AS categoria_nome, fp.nome AS forma_pagamento_nome
        FROM transacoes t
        LEFT JOIN categorias       c  ON t.categoria_id       = c.id
        LEFT JOIN formas_pagamento fp ON t.forma_pagamento_id = fp.id
@@ -136,8 +142,13 @@ router.post('/', async (req, res) => {
       [delta, carteira_id, req.userId]
     );
 
+    const { rows: countRows } = await client.query(
+      'SELECT COUNT(*) FROM transacoes WHERE usuario_id = $1',
+      [req.userId]
+    );
+
     await client.query('COMMIT');
-    res.status(201).json(rows[0]);
+    res.status(201).json({ ...rows[0], numero_transacao: Number(countRows[0].count) });
   } catch (err) {
     await client.query('ROLLBACK');
     console.error(err);

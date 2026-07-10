@@ -13,12 +13,14 @@ function adminAuth(req, res, next) {
 
 router.use(adminAuth);
 
-// GET /admin/accounts  — lista todas as contas
+// GET /admin/accounts  — lista contas (exclui logicamente excluídas por padrão)
+// GET /admin/accounts?excluidas=true  — lista somente as excluídas (aba "Excluídas")
 router.get('/accounts', async (req, res) => {
+  const somenteExcluidas = req.query.excluidas === 'true';
   try {
     const { rows } = await pool.query(
       `SELECT
-         c.id, c.status,
+         c.id, c.status, c.excluida, c.excluida_em,
          COALESCE(c.nome_comprador,
            (SELECT u2.nome FROM usuarios u2 WHERE u2.conta_id = c.id ORDER BY u2.data_cadastro ASC LIMIT 1)
          ) AS nome_comprador,
@@ -35,8 +37,10 @@ router.get('/accounts', async (req, res) => {
        FROM contas c
        JOIN planos p ON c.plano_id = p.id
        LEFT JOIN usuarios u ON u.conta_id = c.id
+       WHERE c.excluida = $1
        GROUP BY c.id, p.nome, p.max_telefones
-       ORDER BY c.created_at DESC`
+       ORDER BY c.created_at DESC`,
+      [somenteExcluidas]
     );
     res.json(rows);
   } catch (err) {
@@ -95,6 +99,39 @@ router.post('/accounts/:id/deactivate', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erro ao desativar conta' });
+  }
+});
+
+// DELETE /admin/accounts/:id  — exclusão lógica: some do painel, mas mantém
+// nome/e-mail/telefone do comprador e todo o histórico (transações, compras etc.)
+router.delete('/accounts/:id', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `UPDATE contas SET excluida = TRUE, excluida_em = NOW()
+       WHERE id = $1 RETURNING id, excluida`,
+      [req.params.id]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Conta não encontrada' });
+    res.json({ success: true, conta: rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro ao excluir conta' });
+  }
+});
+
+// POST /admin/accounts/:id/restore  — reverte a exclusão lógica
+router.post('/accounts/:id/restore', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `UPDATE contas SET excluida = FALSE, excluida_em = NULL
+       WHERE id = $1 RETURNING id, excluida`,
+      [req.params.id]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Conta não encontrada' });
+    res.json({ success: true, conta: rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro ao restaurar conta' });
   }
 });
 
