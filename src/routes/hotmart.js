@@ -11,6 +11,26 @@ function normalizePhoneDigits(phone) {
   return digits.length >= 12 ? digits : `55${digits}`;
 }
 
+// Números brasileiros podem chegar via WhatsApp/UAZAPI SEM o 9º dígito
+// (ex: 553187053782), mesmo quando o comprador digitou o telefone completo
+// na Hotmart (5531987053782). Gera os dois formatos possíveis pra não perder
+// o vínculo com o usuário que já conversou com o bot.
+function remotejidCandidates(phone) {
+  const withCountry = normalizePhoneDigits(phone);
+  if (!withCountry) return [];
+  const ddi  = withCountry.slice(0, 2);
+  const ddd  = withCountry.slice(2, 4);
+  const rest = withCountry.slice(4);
+
+  const digitsSet = new Set([withCountry]);
+  if (rest.length === 9 && rest[0] === '9') {
+    digitsSet.add(`${ddi}${ddd}${rest.slice(1)}`); // variante sem o 9
+  } else if (rest.length === 8) {
+    digitsSet.add(`${ddi}${ddd}9${rest}`); // variante com o 9
+  }
+  return [...digitsSet].map(d => `${d}@s.whatsapp.net`);
+}
+
 async function notificarAtivacao(telefone, nome, contaId, email, planoNome, productId) {
   const webhookUrl = process.env.N8N_WEBHOOK_ATIVACAO;
   if (!webhookUrl) return;
@@ -125,15 +145,15 @@ router.post('/', async (req, res) => {
       contaId = contaRes.rows[0].id;
 
       // Vincula usuário que já interagiu com o bot pelo telefone
-      const telefoneNormalizado = normalizePhoneDigits(telefone);
+      const candidatos = remotejidCandidates(telefone);
       const vinculo = await client.query(
         `UPDATE usuarios SET conta_id = $1, ativo = TRUE
-         WHERE remotejid LIKE $2
+         WHERE remotejid = ANY($2)
          AND conta_id IN (SELECT id FROM contas WHERE status = 'inativo')`,
-        [contaId, `${telefoneNormalizado}%`]
+        [contaId, candidatos]
       );
       if (vinculo.rowCount === 0) {
-        console.warn(`[Hotmart] Nenhum usuário vinculado pelo telefone ${telefone} (normalizado: ${telefoneNormalizado}) na conta ${contaId}`);
+        console.warn(`[Hotmart] Nenhum usuário vinculado pelo telefone ${telefone} (candidatos: ${candidatos.join(', ')}) na conta ${contaId}`);
       }
     }
 
