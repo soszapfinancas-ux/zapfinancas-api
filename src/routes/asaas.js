@@ -23,12 +23,26 @@ async function getAsaasCustomer(customerId) {
   }
 }
 
-// Normaliza telefone para formato remotejid WhatsApp
-function normalizePhone(phone) {
-  if (!phone) return null;
+// Números brasileiros podem chegar via WhatsApp/UAZAPI SEM o 9º dígito
+// (ex: 553187053782), mesmo quando o pagador informou o telefone completo
+// no Asaas (5531987053782). Gera os dois formatos possíveis pra não perder
+// o vínculo com o usuário que já conversou com o bot.
+function remotejidCandidates(phone) {
+  if (!phone) return [];
   const digits = String(phone).replace(/\D/g, '');
-  if (digits.length >= 12) return `${digits}@s.whatsapp.net`;
-  return `55${digits}@s.whatsapp.net`;
+  if (!digits) return [];
+  const withCountry = digits.length >= 12 ? digits : `55${digits}`;
+  const ddi  = withCountry.slice(0, 2);
+  const ddd  = withCountry.slice(2, 4);
+  const rest = withCountry.slice(4);
+
+  const digitsSet = new Set([withCountry]);
+  if (rest.length === 9 && rest[0] === '9') {
+    digitsSet.add(`${ddi}${ddd}${rest.slice(1)}`); // variante sem o 9
+  } else if (rest.length === 8) {
+    digitsSet.add(`${ddi}${ddd}9${rest}`); // variante com o 9
+  }
+  return [...digitsSet].map(d => `${d}@s.whatsapp.net`);
 }
 
 // Notifica usuário via n8n webhook de ativação
@@ -83,8 +97,8 @@ router.post('/', async (req, res) => {
   const nome     = customer?.name    || 'Usuário';
   const telefone = customer?.mobilePhone || customer?.phone || externalRef || '';
 
-  const remotejid = normalizePhone(telefone);
-  const planoId   = planIdByValue(valor);
+  const remotejidCandidatos = remotejidCandidates(telefone);
+  const planoId             = planIdByValue(valor);
 
   const client = await pool.connect();
   try {
@@ -105,13 +119,13 @@ router.post('/', async (req, res) => {
     let contaId = null;
     let nomeAtivacao = nome;
 
-    if (remotejid) {
+    if (remotejidCandidatos.length > 0) {
       const byPhone = await client.query(
         `SELECT c.id, u.nome FROM contas c
          JOIN usuarios u ON u.conta_id = c.id
-         WHERE u.remotejid = $1
+         WHERE u.remotejid = ANY($1)
          ORDER BY c.created_at DESC LIMIT 1`,
-        [remotejid]
+        [remotejidCandidatos]
       );
       if (byPhone.rows.length > 0) {
         contaId      = byPhone.rows[0].id;
@@ -154,13 +168,13 @@ router.post('/', async (req, res) => {
       contaId = contaRes.rows[0].id;
 
       // Se o usuário já tinha enviado mensagem (conta inativa), vincula
-      if (remotejid) {
+      if (remotejidCandidatos.length > 0) {
         await client.query(
           `UPDATE usuarios SET conta_id=$1, ativo=TRUE
-           WHERE remotejid=$2 AND (conta_id IS NULL OR conta_id IN (
+           WHERE remotejid = ANY($2) AND (conta_id IS NULL OR conta_id IN (
              SELECT id FROM contas WHERE status != 'ativo'
            ))`,
-          [contaId, remotejid]
+          [contaId, remotejidCandidatos]
         );
       }
     }

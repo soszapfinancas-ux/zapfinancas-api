@@ -7,12 +7,24 @@ const axios   = require('axios');
 const UAZAPI_BASE = process.env.UAZAPI_BASE_URL || '';
 const UAZAPI_TOK  = process.env.UAZAPI_TOKEN    || '';
 
-function normalizePhone(phone) {
-  const digits = phone.replace(/\D/g, '');
-  // Se já tem DDI 55 e DDD + número (12 ou 13 dígitos)
-  if (digits.length >= 12) return `${digits}@s.whatsapp.net`;
-  // Assume BR
-  return `55${digits}@s.whatsapp.net`;
+// Números brasileiros podem chegar via WhatsApp/UAZAPI SEM o 9º dígito
+// (ex: 553187053782), mesmo quando o usuário digita o telefone completo
+// no login. Gera os dois formatos possíveis pra não perder o match.
+function remotejidCandidates(phone) {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (!digits) return [];
+  const withCountry = digits.length >= 12 ? digits : `55${digits}`;
+  const ddi  = withCountry.slice(0, 2);
+  const ddd  = withCountry.slice(2, 4);
+  const rest = withCountry.slice(4);
+
+  const digitsSet = new Set([withCountry]);
+  if (rest.length === 9 && rest[0] === '9') {
+    digitsSet.add(`${ddi}${ddd}${rest.slice(1)}`); // variante sem o 9
+  } else if (rest.length === 8) {
+    digitsSet.add(`${ddi}${ddd}9${rest}`); // variante com o 9
+  }
+  return [...digitsSet].map(d => `${d}@s.whatsapp.net`);
 }
 
 async function sendWhatsApp(remotejid, text) {
@@ -32,15 +44,16 @@ router.post('/request-code', async (req, res) => {
   const { phone } = req.body;
   if (!phone) return res.status(400).json({ error: 'Campo obrigatório: phone' });
 
-  const remotejid = normalizePhone(phone);
+  const candidatos = remotejidCandidates(phone);
 
   try {
     const userRes = await pool.query(
-      `SELECT u.id, u.nome, c.status AS conta_status
+      `SELECT u.id, u.nome, u.remotejid, c.status AS conta_status
        FROM usuarios u
        JOIN contas c ON u.conta_id = c.id
-       WHERE u.remotejid = $1`,
-      [remotejid]
+       WHERE u.remotejid = ANY($1)
+       LIMIT 1`,
+      [candidatos]
     );
 
     if (userRes.rows.length === 0)
@@ -73,7 +86,7 @@ router.post('/request-code', async (req, res) => {
 
     const nome = user.nome?.split(' ')[0] || 'usuário';
     await sendWhatsApp(
-      remotejid,
+      user.remotejid,
       `🔐 *ZapFinanças — Código de acesso*\n\nOlá, ${nome}!\n\nSeu código de acesso ao painel é:\n\n*${code}*\n\n_Válido por 5 minutos. Não compartilhe._`
     );
 
@@ -89,12 +102,12 @@ router.post('/verify-code', async (req, res) => {
   const { phone, code } = req.body;
   if (!phone || !code) return res.status(400).json({ error: 'Campos obrigatórios: phone, code' });
 
-  const remotejid = normalizePhone(phone);
+  const candidatos = remotejidCandidates(phone);
 
   try {
     const userRes = await pool.query(
-      'SELECT id, nome FROM usuarios WHERE remotejid=$1',
-      [remotejid]
+      'SELECT id, nome FROM usuarios WHERE remotejid = ANY($1) LIMIT 1',
+      [candidatos]
     );
     if (userRes.rows.length === 0)
       return res.status(404).json({ error: 'Usuário não encontrado' });
