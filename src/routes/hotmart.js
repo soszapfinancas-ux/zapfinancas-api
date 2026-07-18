@@ -82,7 +82,7 @@ router.post('/', async (req, res) => {
   const txId      = purchase.transaction || '';
   const email     = buyer.email  || '';
   const nome      = buyer.name   || 'Usuário';
-  const telefone  = buyer.phone  || '';
+  const telefone  = buyer.checkout_phone || buyer.phone || '';
   const valor     = purchase.value?.total || 0;
 
   const client = await pool.connect();
@@ -143,18 +143,21 @@ router.post('/', async (req, res) => {
         [planoId, email, nome, telefone, txId]
       );
       contaId = contaRes.rows[0].id;
+    }
 
-      // Vincula usuário que já interagiu com o bot pelo telefone
-      const candidatos = remotejidCandidates(telefone);
-      const vinculo = await client.query(
-        `UPDATE usuarios SET conta_id = $1, ativo = TRUE
-         WHERE remotejid = ANY($2)
-         AND conta_id IN (SELECT id FROM contas WHERE status = 'inativo')`,
-        [contaId, candidatos]
+    // Vincula o usuário existente (em qualquer conta) ou cria o titular
+    // na hora — cobre tanto quem já falou com o bot quanto quem nunca falou
+    const candidatos = remotejidCandidates(telefone);
+    if (candidatos.length > 0) {
+      const { rows: [row] } = await client.query(
+        `SELECT vincular_usuario_conta($1,$2,$3,$4,'titular') AS usuario_id`,
+        [contaId, candidatos[0], nome, telefone]
       );
-      if (vinculo.rowCount === 0) {
-        console.warn(`[Hotmart] Nenhum usuário vinculado pelo telefone ${telefone} (candidatos: ${candidatos.join(', ')}) na conta ${contaId}`);
+      if (!row?.usuario_id) {
+        console.warn(`[Hotmart] Falha ao vincular usuário na conta ${contaId}`);
       }
+    } else {
+      console.warn(`[Hotmart] Compra sem telefone válido — usuário não pôde ser vinculado (conta ${contaId})`);
     }
 
     // Log da compra
