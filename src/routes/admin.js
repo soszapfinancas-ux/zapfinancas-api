@@ -3,6 +3,31 @@ const express = require('express');
 const router  = express.Router();
 const pool    = require('../db');
 
+// Mesma regra usada em auth.js, asaas.js e hotmart.js: remotejid sempre inclui o DDI 55
+function normalizePhoneDigits(phone) {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (!digits) return '';
+  return digits.length >= 12 ? digits : `55${digits}`;
+}
+
+// Números brasileiros podem chegar sem o 9º dígito — gera as duas variantes
+// possíveis pra não perder o vínculo com o usuário que já conversou com o bot.
+function remotejidCandidates(phone) {
+  const withCountry = normalizePhoneDigits(phone);
+  if (!withCountry) return [];
+  const ddi  = withCountry.slice(0, 2);
+  const ddd  = withCountry.slice(2, 4);
+  const rest = withCountry.slice(4);
+
+  const digitsSet = new Set([withCountry]);
+  if (rest.length === 9 && rest[0] === '9') {
+    digitsSet.add(`${ddi}${ddd}${rest.slice(1)}`); // variante sem o 9
+  } else if (rest.length === 8) {
+    digitsSet.add(`${ddi}${ddd}9${rest}`); // variante com o 9
+  }
+  return [...digitsSet].map(d => `${d}@s.whatsapp.net`);
+}
+
 function adminAuth(req, res, next) {
   const token = req.headers['x-admin-token'] || req.headers['authorization']?.replace('Bearer ', '');
   if (!token || token !== process.env.ADMIN_TOKEN) {
@@ -231,6 +256,64 @@ router.get('/plans', async (_req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erro ao listar planos' });
+  }
+});
+
+// PATCH /admin/plans/:id  — renomeia um plano (nome/descrição)
+router.patch('/plans/:id', async (req, res) => {
+  const { nome, descricao } = req.body;
+  if (!nome) return res.status(400).json({ error: 'nome obrigatório' });
+  try {
+    const { rows } = await pool.query(
+      `UPDATE planos SET nome = $2, descricao = COALESCE($3, descricao)
+       WHERE id = $1 RETURNING id, nome, descricao`,
+      [req.params.id, nome, descricao || null]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Plano não encontrado' });
+    res.json({ success: true, plano: rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro ao renomear plano' });
+  }
+});
+
+// POST /admin/accounts  — cadastra e ativa uma conta manualmente (sem Hotmart)
+router.post('/accounts', async (req, res) => {
+  const { nome, telefone, email, plano_id } = req.body;
+  if (!nome || !telefone || !plano_id)
+    return res.status(400).json({ error: 'Campos obrigatórios: nome, telefone, plano_id' });
+
+  const candidatos = remotejidCandidates(telefone);
+  if (candidatos.length === 0)
+    return res.status(400).json({ error: 'Telefone inválido' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const contaRes = await client.query(
+      `INSERT INTO contas
+         (plano_id, status, email_comprador, nome_comprador, telefone_comprador,
+          data_ativacao, data_expiracao)
+       VALUES ($1,'ativo',$2,$3,$4,NOW(),NOW() + INTERVAL '1 year') RETURNING id`,
+      [plano_id, email || null, nome, telefone]
+    );
+    const contaId = contaRes.rows[0].id;
+
+    const { rows: [row] } = await client.query(
+      `SELECT vincular_usuario_conta($1,$2,$3,$4,'titular') AS usuario_id`,
+      [contaId, candidatos[0], nome, telefone]
+    );
+    if (!row?.usuario_id) throw new Error('Falha ao vincular usuário à conta');
+
+    await client.query('COMMIT');
+    res.status(201).json({ success: true, conta_id: contaId });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ error: 'Erro ao cadastrar conta' });
+  } finally {
+    client.release();
   }
 });
 
