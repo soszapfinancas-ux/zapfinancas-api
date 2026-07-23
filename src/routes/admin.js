@@ -49,9 +49,9 @@ router.get('/accounts', async (req, res) => {
          COALESCE(c.nome_comprador,
            (SELECT u2.nome FROM usuarios u2 WHERE u2.conta_id = c.id ORDER BY u2.data_cadastro ASC LIMIT 1)
          ) AS nome_comprador,
-         COALESCE(c.telefone_identificador,
+         COALESCE(c.email_comprador,
            (SELECT u2.remotejid FROM usuarios u2 WHERE u2.conta_id = c.id ORDER BY u2.data_cadastro ASC LIMIT 1)
-         ) AS telefone_identificador,
+         ) AS email_comprador,
          c.telefone_comprador,
          c.data_ativacao, c.data_expiracao, c.created_at,
          c.plano_id,
@@ -74,17 +74,16 @@ router.get('/accounts', async (req, res) => {
   }
 });
 
-// PATCH /admin/accounts/:id  — edita nome do comprador manualmente
-// (telefone_identificador não é editável aqui: precisa bater com o
-// remotejid pra não quebrar o vínculo com o WhatsApp)
+// PATCH /admin/accounts/:id  — edita nome/email do comprador manualmente
 router.patch('/accounts/:id', async (req, res) => {
-  const { nome_comprador } = req.body;
+  const { nome_comprador, email_comprador } = req.body;
   try {
     const { rows } = await pool.query(
       `UPDATE contas SET
-         nome_comprador = COALESCE($2, nome_comprador)
-       WHERE id = $1 RETURNING id, nome_comprador, telefone_identificador`,
-      [req.params.id, nome_comprador || null]
+         nome_comprador  = COALESCE($2, nome_comprador),
+         email_comprador = COALESCE($3, email_comprador)
+       WHERE id = $1 RETURNING id, nome_comprador, email_comprador`,
+      [req.params.id, nome_comprador || null, email_comprador || null]
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Conta não encontrada' });
     res.json({ success: true, conta: rows[0] });
@@ -99,7 +98,7 @@ router.post('/accounts/:id/activate', async (req, res) => {
   try {
     const { rows } = await pool.query(
       `UPDATE contas SET status='ativo', data_ativacao=NOW()
-       WHERE id=$1 RETURNING id, status, telefone_identificador`,
+       WHERE id=$1 RETURNING id, status, email_comprador`,
       [req.params.id]
     );
     if (rows.length === 0)
@@ -116,7 +115,7 @@ router.post('/accounts/:id/deactivate', async (req, res) => {
   try {
     const { rows } = await pool.query(
       `UPDATE contas SET status='inativo'
-       WHERE id=$1 RETURNING id, status, telefone_identificador`,
+       WHERE id=$1 RETURNING id, status, email_comprador`,
       [req.params.id]
     );
     if (rows.length === 0)
@@ -292,9 +291,11 @@ router.post('/accounts', async (req, res) => {
   try {
     await client.query('BEGIN');
 
+    // email_comprador guarda o identificador ddi+ddd+telefone@s.whatsapp.net
+    // (mesmo formato do remotejid) em vez de e-mail — padrão do cadastro manual
     const contaRes = await client.query(
       `INSERT INTO contas
-         (plano_id, status, telefone_identificador, nome_comprador, telefone_comprador,
+         (plano_id, status, email_comprador, nome_comprador, telefone_comprador,
           data_ativacao, data_expiracao)
        VALUES ($1,'ativo',$2,$3,$4,NOW(),NOW() + INTERVAL '1 year') RETURNING id`,
       [plano_id, candidatos[0], nome, telefone]

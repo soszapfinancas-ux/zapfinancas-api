@@ -65,8 +65,8 @@ A ativação da Hotmart cria a **conta ZapFinanças** (bot WhatsApp) normalmente
 | Rota | O que faz |
 |---|---|
 | `GET /admin/accounts` | Lista contas (`?excluidas=true` pra ver excluídas) |
-| `POST /admin/accounts` | Cadastra e ativa conta manualmente — sem passar pela Hotmart (nome, telefone, e-mail opcional, plano_id) |
-| `PATCH /admin/accounts/:id` | Edita nome/e-mail do comprador |
+| `POST /admin/accounts` | Cadastra e ativa conta manualmente — sem passar pela Hotmart (nome, telefone, plano_id). `email_comprador` recebe automaticamente `ddi+ddd+telefone@s.whatsapp.net`, não é mais digitado |
+| `PATCH /admin/accounts/:id` | Edita nome do comprador |
 | `PATCH /admin/accounts/:id/plan` | Troca o plano de uma conta |
 | `POST /admin/accounts/:id/activate` \| `/deactivate` | Ativa/desativa conta |
 | `POST /admin/accounts/:contaId/add-member` | Adiciona membro à conta |
@@ -104,10 +104,22 @@ Cadastro manual (`POST /admin/accounts`) segue a mesma lógica do webhook: cria 
 - Reenviado o mesmo teste da Hotmart → **ativação automática funcionou de ponta a ponta**: conta nova criada e usuário vinculado ao WhatsApp sem nenhuma ação manual (confirmado comparando contagem de contas antes/depois)
 - Durante a investigação, cheguei a alterar `vincular_usuario_conta` pra gravar o e-mail real da Hotmart em `usuarios.email` (achando que era um bug) — **revertido**: `usuarios.email` precisa continuar no formato `telefone@s.whatsapp.net`, é o que o bot/UAZAPI usa pra reconhecer a conta como ativa. Mudança desfeita em `hotmart.js`/`admin.js`, `schema-v6.sql` (que criava isso) removido do repo
 - Rastreio completo de dados de clientes (e-mail, telefone, etc.) vai ficar numa planilha separada, fora do escopo deste banco por enquanto
-- **Ainda não explicado:** o campo `contas.email_comprador` da conta de teste ficou com um valor estranho (`williamsambagol2024@s.whatsapp.net` — nem o e-mail real completo, nem o formato de remotejid) — não investigado a fundo, fica como pendência caso queiram rastrear e-mail de compra por esse campo no futuro
+- **Ainda não explicado:** o campo `contas.email_comprador` de uma das contas de teste (criada via webhook real) ficou com um valor estranho (`williamsambagol2024@s.whatsapp.net` — nem o e-mail real completo, nem o formato de remotejid) — não investigado a fundo, baixa prioridade
+
+**23/07/2026 (continuação) — Tentativa de renomear a coluna causou queda de produção; revertido; fix final bem mais simples**
+
+- Tentei generalizar o formato `telefone@s.whatsapp.net` renomeando `contas.email_comprador` → `telefone_identificador` em todo o sistema (Hotmart, Asaas, admin, account.js) — mudança grande, tocando 5 arquivos + 1 migração
+- Rodei a migração (`ALTER TABLE ... RENAME COLUMN`) no banco de produção, mas o **código do container não foi atualizado junto** (`git push` não redeploya o container sozinho — isso não estava claro até esse momento) → **painel e API ficaram fora do ar (`500`) por alguns minutos**, porque o código antigo ainda buscava a coluna pelo nome velho
+- **Ação de emergência:** revertido o rename da coluna direto no banco (`ALTER TABLE ... RENAME COLUMN telefone_identificador TO email_comprador`) — confirmado `200 OK` de volta em `GET /admin/accounts`
+- Código local também revertido pro estado estável (`git checkout` no commit anterior ao refactor) pra bater com o que está rodando em produção
+- **Fix final, bem mais simples e sem migração nenhuma:** só o cadastro manual do painel (`POST /admin/accounts`) passou a gravar `ddi+ddd+telefone@s.whatsapp.net` em `email_comprador` (no lugar do e-mail digitado) — Hotmart, Asaas e o resto do sistema continuam exatamente como estavam, sem nenhuma mudança de schema
+- Removido o campo "E-mail (opcional)" do formulário de cadastro manual no painel (não é mais necessário, o valor é automático)
+
+**Lição aprendida:** este container (Docker Swarm, `/app`) **não redeploya automaticamente** quando o código é enviado pro GitHub. Antes de qualquer mudança futura que precise de código + banco sincronizados, confirmar primeiro como o deploy funciona de verdade — evita repetir essa queda.
 
 **Pendências em aberto:**
 - Renomear plano id 5 de "Farol" para "Protocolo Corrida Lucrativa" (SQL ou painel — ver seção acima)
 - Conectar `motorista-planner/planner.html` à API (login OTP + rotas de transactions/reminders), conforme roadmap em `motorista-planner/README.md`
-- Investigar valor estranho em `contas.email_comprador` (ver acima) — baixa prioridade, tracking de e-mail vai migrar pra planilha
-- Conferir na Hotmart se teve venda real entre 16/07 e 23/07 que ficou sem conta criada (janela em que o webhook esteve quebrado) — esses compradores pagaram e podem não ter sido ativados; cadastrar manualmente os que faltarem
+- Investigar valor estranho em `contas.email_comprador` de contas vindas do webhook real (ver acima) — baixa prioridade
+- Conferir na Hotmart se teve venda real entre 16/07 e 23/07 que ficou sem conta criada (janela em que o webhook esteve quebrado por causa do `schema-v5.sql` ausente) — esses compradores pagaram e podem não ter sido ativados; cadastrar manualmente os que faltarem
+- Descobrir e documentar como o deploy de código desse container funciona de verdade (ver "Lição aprendida" acima)
