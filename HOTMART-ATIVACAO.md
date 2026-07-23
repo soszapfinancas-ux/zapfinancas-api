@@ -1,59 +1,98 @@
-# Ativação automática via Hotmart — status e alterações (2026-07-22)
+# Ativação automática via Hotmart — referência do sistema
 
-## Webhook (já ativo em produção)
+Documento vivo: como a ativação automática funciona, o que já foi feito, e o
+passo a passo pra incluir um produto novo no futuro. Atualizar este arquivo
+a cada mudança relevante no fluxo de ativação.
+
+---
+
+## Como funciona (visão geral)
 
 ```
+Compra aprovada na Hotmart
+        ↓
 POST https://zapfinancas.orbitarosa.com/webhook/hotmart
+        ↓
+src/routes/hotmart.js valida o hottok, lê o product_id
+        ↓
+Busca em hotmart_produtos → descobre o plano vinculado
+        ↓
+Cria ou renova a conta (tabela contas) com esse plano, status='ativo'
+        ↓
+Vincula o telefone do comprador a um usuário (vincular_usuario_conta)
+        ↓
+Comprador já pode conversar com o bot no WhatsApp
 ```
 
-- Evento: `PURCHASE_APPROVED`
-- Segurança: header `x-hotmart-hottok` validado contra `HOTMART_HOTTOK` (testado — retorna `401` sem token válido)
-- Confirmar do lado da Hotmart: em **Ferramentas > Webhooks**, os dois produtos abaixo precisam ter esse webhook cadastrado com o evento "Compra Aprovada" marcado.
+- **Webhook:** `POST /webhook/hotmart` — único endpoint, atende todos os produtos, evento esperado: `PURCHASE_APPROVED`
+- **Segurança:** header `x-hotmart-hottok` comparado com `HOTMART_HOTTOK` do `.env` do servidor. Sem token válido → `401`.
+- **Mapeamento produto → plano:** tabela `hotmart_produtos` (`hotmart_product_id`, `plano_id`, `nome`, `ativo`)
+- **Painel admin:** `https://zapfinancas.orbitarosa.com/admin.html`, autenticado por `x-admin-token` (comparado com `ADMIN_TOKEN` do `.env`)
 
-## Produtos mapeados (tabela `hotmart_produtos`)
+## Como incluir um produto novo (checklist)
+
+1. Pegar o **ID do produto** na Hotmart: Produtos > [o produto] > Configurações > URL de checkout (número no final da URL)
+2. Decidir o **plano**: reaproveitar um já existente (Casal, Familiar, Individual, Protocolo Corrida Lucrativa) ou criar um novo
+   - Plano novo: hoje só dá via SQL direto (`INSERT INTO planos (nome, descricao, max_telefones, is_motorista) VALUES (...)`) — não existe rota admin para criar plano, só pra renomear um existente
+3. No painel admin (`admin.html`) → seção **"Produtos Hotmart"** → preencher ID do produto, nome, e escolher o plano → "+ Adicionar"
+   (equivalente via API: `POST /admin/hotmart-products` com `{hotmart_product_id, plano_id, nome}`)
+4. Na Hotmart: **Ferramentas > Webhooks** → cadastrar (ou confirmar que já existe) o webhook desse produto apontando pra `https://zapfinancas.orbitarosa.com/webhook/hotmart`, evento **"Compra Aprovada"**, mesmo hottok dos outros produtos
+5. Testar: usar o botão de teste de webhook da própria Hotmart, ou aguardar uma compra real, e conferir em `GET /admin/accounts` se uma conta nova apareceu com o plano certo
+
+## Produtos mapeados hoje (tabela `hotmart_produtos`)
 
 | Produto Hotmart | ID | Plano vinculado | Status |
 |---|---|---|---|
-| CASAL COM GRANA | `7940783` | Casal (id 1) | ✅ ativo |
-| LUCRO REAL DO MOTORISTA (Protocolo Corrida Lucrativa) | `7918279` | Farol (id 5) → renomear p/ "Protocolo Corrida Lucrativa" | ✅ ativo, rename pendente |
+| CASAL COM GRANA | `7940783` | Casal (id 1) | ✅ ativo, confirmado funcionando (conta ativada 22/07/2026) |
+| LUCRO REAL DO MOTORISTA (Protocolo Corrida Lucrativa) | `7918279` | Farol (id 5) | ✅ ativo, confirmado funcionando (última ativação 11/07/2026) |
 
-Consulta usada pra verificar: `GET /admin/hotmart-products` (header `x-admin-token`).
+Consulta: `GET /admin/hotmart-products` (header `x-admin-token`).
 
-## Pendência: renomear plano id 5
+### Pendência: renomear plano id 5
 
-Ainda como "Farol" (descrição "Meu Farol no Bolso") — nome antigo de outro produto, reaproveitado. 3 contas ativas já usam esse plano, renomear não afeta acesso delas.
+Ainda consta como **"Farol"** (descrição "Meu Farol no Bolso" — nome de outro produto, reaproveitado). 3 contas ativas usam esse plano; renomear é só cosmético, não afeta o acesso delas.
 
-**Opção A — pelo painel (depois do deploy abaixo):** Admin > seção "Planos" > botão "Renomear" na linha do plano.
+Como renomear (qualquer uma das duas):
+- **Painel:** Admin > seção "Planos" > botão "Renomear" na linha do plano
+- **API:** `PATCH /admin/plans/5` com `{"nome": "Protocolo Corrida Lucrativa", "descricao": "Protocolo Corrida Lucrativa"}`
 
-**Opção B — SQL direto no servidor:**
-```sql
-UPDATE planos
-SET nome = 'Protocolo Corrida Lucrativa',
-    descricao = 'Protocolo Corrida Lucrativa'
-WHERE id = 5;
-```
+### Nota: Protocolo Corrida Lucrativa (motorista-planner) não está 100% integrado
 
-## Nota importante: Protocolo Corrida Lucrativa (motorista-planner)
+A ativação da Hotmart cria a **conta ZapFinanças** (bot WhatsApp) normalmente, mas o `motorista-planner/planner.html` (a ferramenta de registro de corridas) continua 100% client-side (`localStorage`), sem login nem conexão com essa API — ver `motorista-planner/README.md`. O comprador recebe a conta ativa, mas o planner em si ainda não está conectado a ela. Mapeamento de integração futura já descrito no README do motorista-planner.
 
-A ativação da Hotmart cria/ativa a **conta ZapFinanças** (bot WhatsApp), mas o `motorista-planner/planner.html` continua 100% client-side (`localStorage`), sem login nem conexão com a API — ver `motorista-planner/README.md`. Ou seja: o comprador recebe a conta ativa, mas o planner em si não está conectado a ela ainda. Integração futura mapeada no próprio README do motorista-planner.
+## Rotas admin relevantes (`src/routes/admin.js`, todas exigem `x-admin-token`)
 
-## Alterações de código feitas nesta sessão (pendentes de deploy)
+| Rota | O que faz |
+|---|---|
+| `GET /admin/accounts` | Lista contas (`?excluidas=true` pra ver excluídas) |
+| `POST /admin/accounts` | Cadastra e ativa conta manualmente — sem passar pela Hotmart (nome, telefone, e-mail opcional, plano_id) |
+| `PATCH /admin/accounts/:id` | Edita nome/e-mail do comprador |
+| `PATCH /admin/accounts/:id/plan` | Troca o plano de uma conta |
+| `POST /admin/accounts/:id/activate` \| `/deactivate` | Ativa/desativa conta |
+| `POST /admin/accounts/:contaId/add-member` | Adiciona membro à conta |
+| `GET /admin/plans` | Lista planos |
+| `PATCH /admin/plans/:id` | Renomeia nome/descrição de um plano |
+| `GET /admin/hotmart-products` \| `POST` \| `DELETE /:id` | Lista/cadastra/remove mapeamento produto Hotmart → plano |
 
-**`src/routes/admin.js`**
-- `PATCH /admin/plans/:id` — renomeia nome/descrição de um plano
-- `POST /admin/accounts` — cadastra e ativa conta manualmente (nome, telefone, e-mail opcional, plano_id), vinculando o titular no WhatsApp do mesmo jeito que o webhook da Hotmart faz
+Cadastro manual (`POST /admin/accounts`) segue a mesma lógica do webhook: cria a conta, ativa na hora, e já vincula o titular no WhatsApp via `vincular_usuario_conta()` — útil pra ativar alguém sem esperar a Hotmart (cortesia, correção manual, etc), inclusive pelo botão **"+ Cadastrar Conta"** no painel.
 
-**`painel/admin.html`**
-- Nova seção "Planos" (lista + botão "Renomear" por linha)
-- Novo botão "+ Cadastrar Conta" na tabela de Contas → modal de cadastro manual
-- `planBadge()`: adicionada cor para "Protocolo Corrida Lucrativa" (mesma cor laranja do "Farol", pra não perder o estilo quando o plano for renomeado)
+---
 
-Sintaxe do backend validada (`node -c`), sem testar contra banco real ainda.
+## Histórico
 
-## Deploy pendente
+**22/07/2026 — Auditoria inicial + correções de segurança + novos recursos**
 
-Esta pasta local **não é** o servidor de produção (não é repositório git). Falta:
+- Analisado o webhook `POST /webhook/hotmart` (único, já existente, ativo)
+- Confirmado via `GET /admin/hotmart-products`: Casal com Grana (`7940783`) e Lucro Real do Motorista/Corrida Lucrativa (`7918279`) já mapeados e ativos
+- Testada a segurança do webhook: hottok inválido → `401` (confirmado)
+- Identificado que o `motorista-planner` (Protocolo Corrida Lucrativa) não está conectado à API — é uma página client-side isolada
+- Adicionadas 2 rotas em `src/routes/admin.js`: `PATCH /admin/plans/:id` (renomear plano) e `POST /admin/accounts` (cadastro manual de conta)
+- Adicionada UI correspondente em `painel/admin.html`: seção "Planos" e botão "+ Cadastrar Conta"
+- **Incidente de segurança encontrado e corrigido:** o `ADMIN_TOKEN` de produção estava em texto puro no `.env.example`, versionado no GitHub **público** `soszapfinancas-ux/zapfinancas-api` desde 04/06/2026 (~7 semanas exposto). Corrigido o arquivo (placeholder no lugar do valor real) e **rotacionado o `ADMIN_TOKEN`** em produção — token antigo confirmado inválido (`401`), token novo confirmado funcionando
+- Removida cópia duplicada/desatualizada `src/routes/admin.html` (sobrava do upload manual anterior) e adicionado `.gitignore` (`.env`, `node_modules/`)
+- Pasta local conectada ao repositório GitHub (`git init` + `remote add origin`) e mudanças enviadas via `git push`
+- Confirmado ao vivo em produção (via curl): as duas rotas novas respondem corretamente (`400` em payload incompleto = rota existe e valida) e o webhook segue ativando compras normais — contas do plano Casal ativadas em 22/07/2026, evidência de que a integração está funcionando no momento desta auditoria
 
-1. Enviar `src/routes/admin.js` e `painel/admin.html` pro servidor
-2. `pm2 restart zapfinancas-api` (só o backend precisa reiniciar — o HTML é servido estático)
-3. Depois do deploy: testar `PATCH /admin/plans/5` e `POST /admin/accounts` em produção
+**Pendências em aberto:**
+- Renomear plano id 5 de "Farol" para "Protocolo Corrida Lucrativa" (SQL ou painel — ver seção acima)
+- Conectar `motorista-planner/planner.html` à API (login OTP + rotas de transactions/reminders), conforme roadmap em `motorista-planner/README.md`
