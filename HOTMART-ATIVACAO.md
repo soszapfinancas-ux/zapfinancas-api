@@ -114,12 +114,13 @@ Cadastro manual (`POST /admin/accounts`) segue a mesma lógica do webhook: cria 
 - Código local também revertido pro estado estável (`git checkout` no commit anterior ao refactor) pra bater com o que está rodando em produção
 - **Fix final, bem mais simples e sem migração nenhuma:** só o cadastro manual do painel (`POST /admin/accounts`) passou a gravar `ddi+ddd+telefone@s.whatsapp.net` em `email_comprador` (no lugar do e-mail digitado) — Hotmart, Asaas e o resto do sistema continuam exatamente como estavam, sem nenhuma mudança de schema
 - Removido o campo "E-mail (opcional)" do formulário de cadastro manual no painel (não é mais necessário, o valor é automático)
+- Deploy automático confirmado e testado ao vivo: `POST /admin/accounts` com conta de teste gravou `email_comprador = "5511900000001@s.whatsapp.net"` (formato correto), conta de teste removida em seguida
 
-**Lição aprendida:** este container (Docker Swarm, `/app`) **não redeploya automaticamente** quando o código é enviado pro GitHub. Antes de qualquer mudança futura que precise de código + banco sincronizados, confirmar primeiro como o deploy funciona de verdade — evita repetir essa queda.
+**Lição aprendida (corrigida):** o container **redeploya automaticamente** a partir do push no GitHub (plataforma tipo Coolify, confirmado no "Histórico de Implantação" do painel dela). O problema do incidente não foi falta de auto-deploy — foi que a migração do banco (`ALTER TABLE ... RENAME COLUMN`) foi rodada manualmente logo em seguida ao push, provavelmente **antes do redeploy automático do código terminar**, criando uma janela onde código antigo + banco novo ficaram incompatíveis. **Regra pra próxima vez:** depois de um `git push` que muda schema, esperar confirmar que o deploy automático terminou (checar o histórico de implantação da plataforma) antes de rodar qualquer migração de banco.
 
 **Pendências em aberto:**
 - Renomear plano id 5 de "Farol" para "Protocolo Corrida Lucrativa" (SQL ou painel — ver seção acima)
 - Conectar `motorista-planner/planner.html` à API (login OTP + rotas de transactions/reminders), conforme roadmap em `motorista-planner/README.md`
 - Investigar valor estranho em `contas.email_comprador` de contas vindas do webhook real (ver acima) — baixa prioridade
 - Conferir na Hotmart se teve venda real entre 16/07 e 23/07 que ficou sem conta criada (janela em que o webhook esteve quebrado por causa do `schema-v5.sql` ausente) — esses compradores pagaram e podem não ter sido ativados; cadastrar manualmente os que faltarem
-- Descobrir e documentar como o deploy de código desse container funciona de verdade (ver "Lição aprendida" acima)
+- ~~Descobrir como o deploy de código funciona~~ — confirmado: auto-deploy via plataforma (tipo Coolify) a partir do push no GitHub
