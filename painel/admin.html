@@ -192,9 +192,10 @@
           class="w-full mt-1 border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 outline-none">
       </div>
       <div>
-        <label class="text-xs font-medium text-gray-600">E-mail / Identificador</label>
-        <input id="editEmail" type="text" placeholder="email@exemplo.com"
-          class="w-full mt-1 border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 outline-none">
+        <label class="text-xs font-medium text-gray-600">Telefone Identificador</label>
+        <input id="editEmail" type="text" disabled
+          class="w-full mt-1 border rounded-lg px-3 py-2 text-sm bg-gray-100 text-gray-500 outline-none">
+        <p class="text-xs text-gray-400 mt-0.5">Somente leitura — precisa bater com o WhatsApp do usuário, não editável aqui</p>
       </div>
       <div class="grid grid-cols-2 gap-3">
         <div>
@@ -291,11 +292,6 @@
       <div>
         <label class="text-xs font-medium text-gray-600">Telefone (WhatsApp)</label>
         <input id="caTelefone" type="text" placeholder="ex: 31987053782"
-          class="w-full mt-1 border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 outline-none">
-      </div>
-      <div>
-        <label class="text-xs font-medium text-gray-600">E-mail (opcional)</label>
-        <input id="caEmail" type="text" placeholder="email@exemplo.com"
           class="w-full mt-1 border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 outline-none">
       </div>
       <div>
@@ -413,9 +409,9 @@ function renderAccounts(accounts) {
           <div class="flex items-center gap-2">
             <div>
               <div class="font-medium text-gray-800">${a.nome_comprador||'—'}</div>
-              <div class="text-xs text-gray-400">${a.email_comprador||'—'}</div>
+              <div class="text-xs text-gray-400">${a.telefone_identificador||'—'}</div>
             </div>
-            <button onclick="openEditModal(${a.id},'${(a.nome_comprador||'').replace(/'/g,"\\'")}','${(a.email_comprador||'').replace(/'/g,"\\'")}',${a.plano_id},${a.max_membros||'null'})"
+            <button onclick="openEditModal(${a.id},'${(a.nome_comprador||'').replace(/'/g,"\\'")}','${(a.telefone_identificador||'').replace(/'/g,"\\'")}',${a.plano_id},${a.max_membros||'null'})"
               class="text-gray-300 hover:text-gray-500 shrink-0 text-xs" title="Editar conta">✏️</button>
           </div>
         </td>
@@ -444,7 +440,7 @@ function filterUsers() {
   const q = document.getElementById('searchInput').value.toLowerCase();
   const filtered = allAccounts.filter(a =>
     (a.nome_comprador||'').toLowerCase().includes(q) ||
-    (a.email_comprador||'').toLowerCase().includes(q)
+    (a.telefone_identificador||'').toLowerCase().includes(q)
   );
   renderAccounts(filtered);
 }
@@ -501,7 +497,6 @@ function openEditModal(id, nome, email, planoId, maxMembros) {
 async function saveEdit() {
   const id         = document.getElementById('editContaIdInput').value;
   const nome       = document.getElementById('editNome').value.trim();
-  const email      = document.getElementById('editEmail').value.trim();
   const planoId    = document.getElementById('editPlano').value;
   const maxMembros = document.getElementById('editMaxMembros').value;
 
@@ -510,10 +505,10 @@ async function saveEdit() {
 
   const calls = [];
 
-  if (nome || email) {
+  if (nome) {
     calls.push(adminApi(`/admin/accounts/${id}`, {
       method: 'PATCH',
-      body: JSON.stringify({ nome_comprador: nome || undefined, email_comprador: email || undefined }),
+      body: JSON.stringify({ nome_comprador: nome }),
     }));
   }
   if (planoId) {
@@ -630,7 +625,6 @@ async function savePlan() {
 function openCreateAccountModal() {
   document.getElementById('caNome').value     = '';
   document.getElementById('caTelefone').value = '';
-  document.getElementById('caEmail').value    = '';
   document.getElementById('caPlano').value    = '';
   document.getElementById('caErr').classList.add('hidden');
   document.getElementById('createAccountModal').classList.remove('hidden');
@@ -639,7 +633,6 @@ function openCreateAccountModal() {
 async function createAccount() {
   const nome     = document.getElementById('caNome').value.trim();
   const telefone = document.getElementById('caTelefone').value.trim();
-  const email    = document.getElementById('caEmail').value.trim();
   const planoId  = document.getElementById('caPlano').value;
   const errEl    = document.getElementById('caErr');
   errEl.classList.add('hidden');
@@ -651,7 +644,7 @@ async function createAccount() {
   }
   const r = await adminApi('/admin/accounts', {
     method: 'POST',
-    body: JSON.stringify({ nome, telefone, email: email || undefined, plano_id: Number(planoId) }),
+    body: JSON.stringify({ nome, telefone, plano_id: Number(planoId) }),
   });
   if (!r) return;
   if (r.error) {

@@ -111,11 +111,18 @@ router.post('/', async (req, res) => {
       return res.json({ received: true, ignored: true, reason: 'produto não mapeado' });
     }
 
-    // Verifica conta existente pelo e-mail
-    const existing = await client.query(
-      `SELECT id FROM contas WHERE email_comprador = $1 ORDER BY created_at DESC LIMIT 1`,
-      [email]
-    );
+    // candidatos precisa vir antes: é usado tanto pra achar conta existente
+    // quanto pra vincular o titular no WhatsApp mais abaixo
+    const candidatos = remotejidCandidates(telefone);
+
+    // Verifica conta existente pelo identificador de telefone (mesmo
+    // formato do remotejid) — não usa e-mail, esse fica só no log da compra
+    const existing = candidatos.length > 0
+      ? await client.query(
+          `SELECT id FROM contas WHERE telefone_identificador = ANY($1) ORDER BY created_at DESC LIMIT 1`,
+          [candidatos]
+        )
+      : { rows: [] };
 
     let contaId;
     if (existing.rows.length > 0) {
@@ -137,17 +144,16 @@ router.post('/', async (req, res) => {
       // Cria nova conta
       const contaRes = await client.query(
         `INSERT INTO contas
-           (plano_id, status, email_comprador, nome_comprador, telefone_comprador,
+           (plano_id, status, telefone_identificador, nome_comprador, telefone_comprador,
             hotmart_transaction_id, data_ativacao, data_expiracao)
          VALUES ($1,'ativo',$2,$3,$4,$5,NOW(),NOW() + INTERVAL '1 year') RETURNING id`,
-        [planoId, email, nome, telefone, txId]
+        [planoId, candidatos[0] || null, nome, telefone, txId]
       );
       contaId = contaRes.rows[0].id;
     }
 
     // Vincula o usuário existente (em qualquer conta) ou cria o titular
     // na hora — cobre tanto quem já falou com o bot quanto quem nunca falou
-    const candidatos = remotejidCandidates(telefone);
     if (candidatos.length > 0) {
       const { rows: [row] } = await client.query(
         `SELECT vincular_usuario_conta($1,$2,$3,$4,'titular') AS usuario_id`,

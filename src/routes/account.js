@@ -11,7 +11,7 @@ router.get('/', async (req, res) => {
   try {
     const contaRes = await pool.query(
       `SELECT
-         c.id, c.status, c.nome_comprador, c.email_comprador,
+         c.id, c.status, c.nome_comprador, c.telefone_identificador,
          c.telefone_comprador, c.data_ativacao, c.data_expiracao,
          p.nome AS plano, p.max_telefones, p.tem_exportacao,
          p.tem_lembretes_avancados

@@ -49,9 +49,9 @@ router.get('/accounts', async (req, res) => {
          COALESCE(c.nome_comprador,
            (SELECT u2.nome FROM usuarios u2 WHERE u2.conta_id = c.id ORDER BY u2.data_cadastro ASC LIMIT 1)
          ) AS nome_comprador,
-         COALESCE(c.email_comprador,
+         COALESCE(c.telefone_identificador,
            (SELECT u2.remotejid FROM usuarios u2 WHERE u2.conta_id = c.id ORDER BY u2.data_cadastro ASC LIMIT 1)
-         ) AS email_comprador,
+         ) AS telefone_identificador,
          c.telefone_comprador,
          c.data_ativacao, c.data_expiracao, c.created_at,
          c.plano_id,
@@ -74,16 +74,17 @@ router.get('/accounts', async (req, res) => {
   }
 });
 
-// PATCH /admin/accounts/:id  — edita nome/email do comprador manualmente
+// PATCH /admin/accounts/:id  — edita nome do comprador manualmente
+// (telefone_identificador não é editável aqui: precisa bater com o
+// remotejid pra não quebrar o vínculo com o WhatsApp)
 router.patch('/accounts/:id', async (req, res) => {
-  const { nome_comprador, email_comprador } = req.body;
+  const { nome_comprador } = req.body;
   try {
     const { rows } = await pool.query(
       `UPDATE contas SET
-         nome_comprador  = COALESCE($2, nome_comprador),
-         email_comprador = COALESCE($3, email_comprador)
-       WHERE id = $1 RETURNING id, nome_comprador, email_comprador`,
-      [req.params.id, nome_comprador || null, email_comprador || null]
+         nome_comprador = COALESCE($2, nome_comprador)
+       WHERE id = $1 RETURNING id, nome_comprador, telefone_identificador`,
+      [req.params.id, nome_comprador || null]
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Conta não encontrada' });
     res.json({ success: true, conta: rows[0] });
@@ -98,7 +99,7 @@ router.post('/accounts/:id/activate', async (req, res) => {
   try {
     const { rows } = await pool.query(
       `UPDATE contas SET status='ativo', data_ativacao=NOW()
-       WHERE id=$1 RETURNING id, status, email_comprador`,
+       WHERE id=$1 RETURNING id, status, telefone_identificador`,
       [req.params.id]
     );
     if (rows.length === 0)
@@ -115,7 +116,7 @@ router.post('/accounts/:id/deactivate', async (req, res) => {
   try {
     const { rows } = await pool.query(
       `UPDATE contas SET status='inativo'
-       WHERE id=$1 RETURNING id, status, email_comprador`,
+       WHERE id=$1 RETURNING id, status, telefone_identificador`,
       [req.params.id]
     );
     if (rows.length === 0)
@@ -279,7 +280,7 @@ router.patch('/plans/:id', async (req, res) => {
 
 // POST /admin/accounts  — cadastra e ativa uma conta manualmente (sem Hotmart)
 router.post('/accounts', async (req, res) => {
-  const { nome, telefone, email, plano_id } = req.body;
+  const { nome, telefone, plano_id } = req.body;
   if (!nome || !telefone || !plano_id)
     return res.status(400).json({ error: 'Campos obrigatórios: nome, telefone, plano_id' });
 
@@ -293,10 +294,10 @@ router.post('/accounts', async (req, res) => {
 
     const contaRes = await client.query(
       `INSERT INTO contas
-         (plano_id, status, email_comprador, nome_comprador, telefone_comprador,
+         (plano_id, status, telefone_identificador, nome_comprador, telefone_comprador,
           data_ativacao, data_expiracao)
        VALUES ($1,'ativo',$2,$3,$4,NOW(),NOW() + INTERVAL '1 year') RETURNING id`,
-      [plano_id, email || null, nome, telefone]
+      [plano_id, candidatos[0], nome, telefone]
     );
     const contaId = contaRes.rows[0].id;
 

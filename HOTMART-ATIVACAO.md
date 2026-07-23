@@ -91,8 +91,23 @@ Cadastro manual (`POST /admin/accounts`) segue a mesma lógica do webhook: cria 
 - **Incidente de segurança encontrado e corrigido:** o `ADMIN_TOKEN` de produção estava em texto puro no `.env.example`, versionado no GitHub **público** `soszapfinancas-ux/zapfinancas-api` desde 04/06/2026 (~7 semanas exposto). Corrigido o arquivo (placeholder no lugar do valor real) e **rotacionado o `ADMIN_TOKEN`** em produção — token antigo confirmado inválido (`401`), token novo confirmado funcionando
 - Removida cópia duplicada/desatualizada `src/routes/admin.html` (sobrava do upload manual anterior) e adicionado `.gitignore` (`.env`, `node_modules/`)
 - Pasta local conectada ao repositório GitHub (`git init` + `remote add origin`) e mudanças enviadas via `git push`
-- Confirmado ao vivo em produção (via curl): as duas rotas novas respondem corretamente (`400` em payload incompleto = rota existe e valida) e o webhook segue ativando compras normais — contas do plano Casal ativadas em 22/07/2026, evidência de que a integração está funcionando no momento desta auditoria
+- Confirmado ao vivo em produção (via curl): as duas rotas novas respondem corretamente (`400` em payload incompleto = rota existe e valida)
+- ⚠️ Correção: as contas do plano Casal ativadas em 22/07/2026 citadas nesta auditoria **não eram prova do webhook** — foram criadas manualmente pelo painel (cadastro manual), não pela Hotmart. O teste de ponta a ponta de verdade só aconteceu no dia seguinte (ver abaixo).
+
+**23/07/2026 — Teste real do webhook revelou bug crítico (função ausente no banco) + achados sobre e-mail**
+
+- Reenviado teste de webhook real pela Hotmart (`PURCHASE_APPROVED`, produto Casal com Grana) → retornou **500 Internal Server Error**
+- Log do servidor (`pm2 logs`) revelou a causa: `function vincular_usuario_conta(...) does not exist` (Postgres `42883`) — **o `schema-v5.sql` nunca tinha sido aplicado no banco de produção**, apesar do código (`hotmart.js`) já depender dele
+- Reconstruído o motivo pelas datas: `schema-v5.sql` foi escrito em 16/07/2026, e todas as contas reais encontradas (ativadas entre 19/06 e 14/07) são anteriores a isso — ou seja, **desde 16/07 nenhuma compra de cliente novo estava sendo ativada automaticamente**, falhando silenciosamente (a Hotmart tentava, recebia 500, tentava de novo, e desistia)
+- Isso também deixava quebrado o `POST /admin/accounts` (cadastro manual) criado no dia anterior, pelo mesmo motivo
+- **Correção aplicada:** `schema-v5.sql` rodado em produção via script Node (`pg` + `dotenv`, direto no container — não tem `psql` instalado nele, é um container Docker Swarm em `/app`) — sucesso confirmado
+- Reenviado o mesmo teste da Hotmart → **ativação automática funcionou de ponta a ponta**: conta nova criada e usuário vinculado ao WhatsApp sem nenhuma ação manual (confirmado comparando contagem de contas antes/depois)
+- Durante a investigação, cheguei a alterar `vincular_usuario_conta` pra gravar o e-mail real da Hotmart em `usuarios.email` (achando que era um bug) — **revertido**: `usuarios.email` precisa continuar no formato `telefone@s.whatsapp.net`, é o que o bot/UAZAPI usa pra reconhecer a conta como ativa. Mudança desfeita em `hotmart.js`/`admin.js`, `schema-v6.sql` (que criava isso) removido do repo
+- Rastreio completo de dados de clientes (e-mail, telefone, etc.) vai ficar numa planilha separada, fora do escopo deste banco por enquanto
+- **Ainda não explicado:** o campo `contas.email_comprador` da conta de teste ficou com um valor estranho (`williamsambagol2024@s.whatsapp.net` — nem o e-mail real completo, nem o formato de remotejid) — não investigado a fundo, fica como pendência caso queiram rastrear e-mail de compra por esse campo no futuro
 
 **Pendências em aberto:**
 - Renomear plano id 5 de "Farol" para "Protocolo Corrida Lucrativa" (SQL ou painel — ver seção acima)
 - Conectar `motorista-planner/planner.html` à API (login OTP + rotas de transactions/reminders), conforme roadmap em `motorista-planner/README.md`
+- Investigar valor estranho em `contas.email_comprador` (ver acima) — baixa prioridade, tracking de e-mail vai migrar pra planilha
+- Conferir na Hotmart se teve venda real entre 16/07 e 23/07 que ficou sem conta criada (janela em que o webhook esteve quebrado) — esses compradores pagaram e podem não ter sido ativados; cadastrar manualmente os que faltarem

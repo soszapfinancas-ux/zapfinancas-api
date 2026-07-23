@@ -133,12 +133,14 @@ router.post('/', async (req, res) => {
       }
     }
 
-    if (!contaId && email) {
-      const byEmail = await client.query(
-        `SELECT id FROM contas WHERE email_comprador = $1 ORDER BY created_at DESC LIMIT 1`,
-        [email]
+    // Fallback: conta existe mas ainda não tem usuário vinculado (comprou
+    // e nunca falou com o bot) — busca pelo mesmo identificador de telefone
+    if (!contaId && remotejidCandidatos.length > 0) {
+      const byPhoneOnConta = await client.query(
+        `SELECT id FROM contas WHERE telefone_identificador = ANY($1) ORDER BY created_at DESC LIMIT 1`,
+        [remotejidCandidatos]
       );
-      if (byEmail.rows.length > 0) contaId = byEmail.rows[0].id;
+      if (byPhoneOnConta.rows.length > 0) contaId = byPhoneOnConta.rows[0].id;
     }
 
     if (contaId) {
@@ -159,11 +161,11 @@ router.post('/', async (req, res) => {
       // Cria nova conta (usuário pagou mas ainda não mandou mensagem)
       const contaRes = await client.query(
         `INSERT INTO contas
-           (plano_id, status, email_comprador, nome_comprador, telefone_comprador,
+           (plano_id, status, telefone_identificador, nome_comprador, telefone_comprador,
             data_ativacao, data_expiracao, asaas_customer_id)
          VALUES ($1,'ativo',$2,$3,$4,NOW(),NOW() + INTERVAL '1 year',$5)
          RETURNING id`,
-        [planoId, email || null, nome, telefone || null, customerId || null]
+        [planoId, remotejidCandidatos[0] || null, nome, telefone || null, customerId || null]
       );
       contaId = contaRes.rows[0].id;
 
