@@ -301,8 +301,8 @@ router.post('/accounts', async (req, res) => {
     const contaId = contaRes.rows[0].id;
 
     const { rows: [row] } = await client.query(
-      `SELECT vincular_usuario_conta($1,$2,$3,$4,'titular') AS usuario_id`,
-      [contaId, candidatos[0], nome, telefone]
+      `SELECT vincular_usuario_conta($1,$2,$3,$4,'titular',$5) AS usuario_id`,
+      [contaId, candidatos[0], nome, telefone, email || null]
     );
     if (!row?.usuario_id) throw new Error('Falha ao vincular usuário à conta');
 

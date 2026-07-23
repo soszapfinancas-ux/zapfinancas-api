@@ -150,8 +150,8 @@ router.post('/', async (req, res) => {
     const candidatos = remotejidCandidates(telefone);
     if (candidatos.length > 0) {
       const { rows: [row] } = await client.query(
-        `SELECT vincular_usuario_conta($1,$2,$3,$4,'titular') AS usuario_id`,
-        [contaId, candidatos[0], nome, telefone]
+        `SELECT vincular_usuario_conta($1,$2,$3,$4,'titular',$5) AS usuario_id`,
+        [contaId, candidatos[0], nome, telefone, email || null]
       );
       if (!row?.usuario_id) {
         console.warn(`[Hotmart] Falha ao vincular usuário na conta ${contaId}`);
